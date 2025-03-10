@@ -413,12 +413,85 @@ def generate_final_toc(summaries: List[str], model='qwen-max-latest') -> Tuple[s
     except Exception as e:
         print(f"生成最终目录时出错: {e}")
         return f"生成最终目录失败: {str(e)}", 0.0
+    
+def match_focus_points(title: str, model: str = "Pro/deepseek-ai/DeepSeek-V3") -> tuple:
+    """
+    将研报标题与预定义的二级关注点进行匹配
+    
+    Args:
+        title: 研报标题
+        model: 使用的模型名称
+        
+    Returns:
+        tuple: (匹配结果列表, API调用成本)
+    """
+    
+    # 预定义的二级关注点列表
+    focus_points = ['行业定义', '行业概况', '行业特征', '宏观环境', '行业政策趋势分析', '市场划分/结构', 
+                   '市场容量', '市场规模', '市场发展速度', '市场吸引力/增长潜力', '市场驱动', 
+                   '行业生命周期分析', '市场限制', '重点区域市场', '进出口市场', '产品功能和性能评估',
+                   '技术创新跟踪', '行业竞争格局', '行业竞争趋势', '行业内主要玩家', '潜在对手分析', 
+                   '产业链上下游图谱', '供给与需求', '主要原材料的价格变化及影响因素', '行业内的主要盈利模式',
+                   '成本结构和利润空间分析', '定价策略', '投资回报和风险收益分析', '市场风险', '财务风险',
+                   '运营风险', '供应链分析', '法律和合规分析', '文化社会风险', '用户画像分析', '需求特征',
+                   '消费者及下游产业对产品的购买需求规模', '议价能力', '营销策略', '推广策略', '品牌建设',
+                   '核心能力', '产品布局', '竞争策略', '竞争优势', '新兴技术及影响', '创新发展趋势', 
+                   '行业技术转型趋势']
+    
+    prompt = f"""
+    请分析以下研报标题,判断它与哪些预定义的二级关注点最相关:
+    
+    标题: {title}
+    
+    预定义的二级关注点列表:
+    {json.dumps(focus_points, ensure_ascii=False, indent=2)}
+    
+    请返回最相关的3个二级关注点(如果相关度低于50%则不返回),格式如下:
+    {{
+                "二级关注点": ["二级关注点标签1","二级关注点标签2"....，"..."]
+    }}
+    
+    注意:
+    1. 只返回置信度大于70的匹配结果
+    2. 最多返回5个匹配结果
+    3. 只返回JSON格式结果,不要其他说明文字
+    """
 
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "你是一个专业的研报分析助手,擅长对研报主题进行分类和匹配。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
+        )
+        
+        result = json.loads(completion.choices[0].message.content)
+        
+        # 计算API调用成本
+        if model == "Pro/deepseek-ai/DeepSeek-V3":
+            input_cost = (completion.usage.prompt_tokens / 1000) * 0.002 
+            output_cost = (completion.usage.completion_tokens / 1000) * 0.008
+        cost = input_cost + output_cost
+        
+        return result, cost
+        
+    except Exception as e:
+        print(f"匹配关注点时出错: {e}")
+        return {"matches": []}, 0.0
 
 
 
 if __name__ == "__main__":
-    # title = "AI芯片市场分析"
+    title = "AI芯片市场分析"
+    start_time = time.time()
+    result, cost = match_focus_points(title)
+    end_time = time.time()
+    print(f"匹配耗时: {end_time - start_time:.2f}秒")
+    print(result)
+    print(cost)
     # content, reasoning_content = title_augement(title)
     # print(json.dumps(content, ensure_ascii=False, indent=2))
     print(1)
+    

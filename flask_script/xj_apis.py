@@ -15,18 +15,18 @@ def report_overview_stage_0_augment_title_api():
         
         def generate():
             for chunk in title_augement_stream(title):
-                # 如果chunk是字典类型,说明是JSON结果
+                # 如果chunk是字典类型,说明是最终JSON结果
                 if isinstance(chunk, dict):
-                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-                # 如果是思维链内容
+                    yield f"event: result\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                # 如果是扩展标题内容
                 elif chunk.startswith("\n\n扩展标题:"):
-                    yield f"data: {chunk}\n\n"
+                    yield f"event: title\ndata: {chunk}\n\n"
                 # 如果是关键词内容
                 elif chunk.startswith("\n关键词:") or chunk.startswith("- "):
-                    yield f"data: {chunk}\n\n"
+                    yield f"event: keyword\ndata: {chunk}\n\n"
                 # 其他思维链内容
                 else:
-                    yield f"data: {chunk}\n\n"
+                    yield f"event: think\ndata: {chunk}\n\n"
         
         return Response(stream_with_context(generate()), 
                        content_type='text/event-stream')
