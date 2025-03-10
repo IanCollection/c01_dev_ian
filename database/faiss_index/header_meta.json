@@ -1,0 +1,18 @@
+{
+  "total_vectors": 18593,
+  "last_trained_count": 18593,
+  "last_updated": "2025-03-07T02:20:16.641091",
+  "parameters": {
+    "nlist": 136,
+    "m": 16,
+    "nbits": 8
+  },
+  "history": [
+    {
+      "time": "2025-03-07T02:20:16.641113",
+      "operation": "initial_build",
+      "added_vectors": 18593,
+      "total_vectors": 18593
+    }
+  ]
+}
