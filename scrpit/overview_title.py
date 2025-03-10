@@ -1,8 +1,9 @@
-from Agent.Overview_agent import match_focus_points
+from typing import Any
+
+from Agent.Overview_agent import match_focus_points, generate_toc_from_focus_points
 import json
 
-
-def match_focus_points_from_file(text: str) -> tuple[dict, dict]:
+def match_focus_points_from_file(text: str) -> tuple[dict[Any, dict[Any, Any]], dict[Any, list[Any]], str]:
     """
     根据输入文本匹配关注点,并返回一级和二级关注点的对应关系
     
@@ -60,8 +61,20 @@ def match_focus_points_from_file(text: str) -> tuple[dict, dict]:
 
     return result,focus_points_mapping,final_text
 
+def generate_comprehensive_toc_with_focus_points(title: str) -> tuple[str, float]:
+    """
+    根据标题和关注点生成综合目录结构
 
+    Args:
+        title: 研报标题
+        focus_points: 关注点字典
 
+    Returns:
+        tuple: 包含生成的Markdown格式目录结构(str)和API调用成本(float)
+    """
+    result, focus_points_mapping, focus_points = match_focus_points_from_file(title)
+    overview_from_focus_points = generate_toc_from_focus_points(title, focus_points)
+    return overview_from_focus_points
 
 
 
@@ -70,8 +83,8 @@ if __name__ == "__main__":
     title = "AI芯片市场分析和行业趋势"
     result, focus_points_mapping, final_text= match_focus_points_from_file(title)
 
-    print(result)
-    print('-'*20)
-    print(focus_points_mapping)
-    print('-'*20)
-    print(final_text)
+    # print(result)
+    # print('-'*20)
+    # print(focus_points_mapping)
+    # print('-'*20)
+    # print(final_text)

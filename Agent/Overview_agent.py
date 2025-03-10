@@ -482,16 +482,92 @@ def match_focus_points(title: str, model: str = "Pro/deepseek-ai/DeepSeek-V3") -
         return {"matches": []}, 0.0
 
 
+def generate_toc_from_focus_points(title: str, focus_points: str) -> tuple[str, float]:
+    """
+    根据标题和关注点生成研报目录结构
+    
+    Args:
+        title: 研报标题
+        focus_points: 关注点字符串
+        
+    Returns:
+        tuple: 包含生成的Markdown格式目录结构(str)和API调用成本(float)
+    """
+    
+    prompt = f"""
+    请基于以下研报标题和关注点生成一个详细的三级目录结构:
+
+    标题: {title}
+    关注点: {focus_points}
+
+    要求:
+    1. 生成一个完整的三级目录结构,根据研报主题和行业特点灵活组织,不必严格遵循关注点的层级结构。
+    2. 目录结构要符合研报写作逻辑,从宏观到微观,从现状到趋势
+    3. 确保三级标题具体且可操作,便于后续写作
+    4. 各级标题之间要有逻辑关联性
+    5. 使用Markdown格式:
+       - 一级标题: # 标题
+       - 二级标题: ## 标题  
+       - 三级标题: ### 标题
+
+    请直接返回Markdown格式的目录文本,不要包含任何额外说明。
+    """
+
+    try:
+        # # 使用 DeepSeek-V3
+        # completion_deepseek = client.chat.completions.create(
+        #     model="Pro/deepseek-ai/DeepSeek-V3",
+        #     messages=[
+        #         {"role": "system", "content": "你是一个专业的研报写作助手,擅长生成研报大纲。"},
+        #         {"role": "user", "content": prompt}
+        #     ],
+        #     temperature=0.7
+        # )
+        # 使用 DeepSeek-V3 的结果
+        # toc = completion_deepseek.choices[0].message.content
+
+        # 使用 Qwen-Max
+        completion_qwen = qwen_client.chat.completions.create(
+            model="qwen-max-latest",
+            messages=[
+                {"role": "system", "content": "你是一个专业的研报写作助手,擅长生成研报大纲。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
+        )
+
+
+        toc_qwen = completion_qwen.choices[0].message.content
+        # 计算成本
+        input_cost = (completion_qwen.usage.prompt_tokens / 1000) * 0.0024
+        output_cost = (completion_qwen.usage.completion_tokens / 1000) * 0.0096
+        cost = input_cost + output_cost
+        
+        return toc_qwen,cost
+        
+    except Exception as e:
+        print(f"生成目录时出错: {e}")
+        return "", 0.0
+
+
+
+
 
 if __name__ == "__main__":
+    # title = "AI芯片市场分析"
+    # start_time = time.time()
+    # result, cost = match_focus_points(title)
+    # end_time = time.time()
+    # print(f"匹配耗时: {end_time - start_time:.2f}秒")
+    # print(result)
+    # print(cost)
+    # # content, reasoning_content = title_augement(title)
+    # # print(json.dumps(content, ensure_ascii=False, indent=2))
+    # print(1)
     title = "AI芯片市场分析"
-    start_time = time.time()
-    result, cost = match_focus_points(title)
-    end_time = time.time()
-    print(f"匹配耗时: {end_time - start_time:.2f}秒")
-    print(result)
+    focus_points = "一级关注点:市场规模分析(二级关注点:市场规模、二级关注点:市场发展速度)，一级关注点:市场机会评估(二级关注点:市场吸引力/增长潜力)"
+    toc, cost, toc_qwen = generate_toc_from_focus_points(title, focus_points)
+    print(toc)
     print(cost)
-    # content, reasoning_content = title_augement(title)
-    # print(json.dumps(content, ensure_ascii=False, indent=2))
-    print(1)
+    print(toc_qwen)
     

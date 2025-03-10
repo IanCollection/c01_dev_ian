@@ -60,7 +60,7 @@ def load_faiss_index(index_type):
     return index, ids
 
 # 检索函数
-def search_faiss(query, index_type, top_k=1):
+def search_faiss(query, index_type, top_k=10):
     """
     在FAISS索引中搜索最相似的文档
     """
@@ -192,7 +192,7 @@ def search_and_query(query, index_type='content', top_k=2, with_details=True):
 
 
 
-def search(query, index_type='content', top_k=2, with_details=True):
+def search(query, index_type='content', top_k=5):
     """
     综合检索函数，支持检索文件名、标题和内容
     
@@ -200,15 +200,15 @@ def search(query, index_type='content', top_k=2, with_details=True):
         query (str): 查询文本
         index_type (str): 索引类型，可选值为 'filename', 'header', 'content'
         top_k (int): 返回的结果数量
-        with_details (bool): 是否返回详细信息
+
     
     Returns:
         list: 检索结果列表
     """
     # 执行FAISS检索
-    start_time = time.time()
+    # start_time = time.time()
     faiss_results_ids = search_faiss(query, index_type, top_k)
-    end_time = time.time()
+    # end_time = time.time()
     return faiss_results_ids
 
 
