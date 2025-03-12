@@ -18,6 +18,7 @@ from Agent.client_manager import qwen_client, silicon_client
 client = silicon_client
 qwen_client = qwen_client
 from Agent.tool_agents import json_format_agent
+
 def title_augement(title):
     """
     对用户输入的标题进行语义增强，扩展其含义和关键词，生成三组关键词用于研报筛选
@@ -66,13 +67,28 @@ def title_augement(title):
             reasoning_content += chunk.choices[0].delta.reasoning_content
     
     # 尝试解析JSON内容
-    try:
-        json_content = json.loads(content)
-        return json_content, reasoning_content
-    except json.JSONDecodeError:
-        # 如果解析失败,使用format_agent进行格式化
-        formatted_json = json_format_agent(content)
-        return formatted_json, reasoning_content
+    # try:
+    json_content = json.loads(content)
+    # 确保返回的JSON包含三组关键词
+    if 'keywords' not in json_content:
+        json_content['keywords'] = {
+            'core_keywords': [],
+            'domain_keywords': [],
+            'focus_keywords': []
+        }
+    return json_content, reasoning_content
+    # except json.JSONDecodeError:
+    #     # 如果解析失败,使用format_agent进行格式化
+    #     formatted_json = json_format_agent(content)
+    #     # 确保格式化后的JSON包含三组关键词
+    #     if 'keywords' not in formatted_json:
+    #         formatted_json['keywords'] = {
+    #             'core_keywords': [],
+    #             'domain_keywords': [],
+    #             'focus_keywords': []
+    #         }
+    #     return formatted_json, reasoning_content
+    
 def title_augement_stream(title):
     """
     对用户输入的标题进行语义增强的流式版本，用于API接口的实时输出
@@ -548,9 +564,64 @@ def generate_toc_from_focus_points(title: str, focus_points: str) -> tuple[str, 
     except Exception as e:
         print(f"生成目录时出错: {e}")
         return "", 0.0
+    
+def semantic_enhancement_agent(title):
+    """
+    对研报标题进行语义增强，深入分析标题含义并扩展相关内容，优化后的结果可用于政策ES搜索
+    
+    Args:
+        title (str): 用户输入的研报标题
+    
+    Returns:
+        dict: 包含语义增强结果的字典，包括扩展标题、关键词列表等，适合ES搜索使用
+    """
+    prompt = f"""
+    请对以下研报标题进行深度语义增强分析，结果将用于政策文档的精准检索：
+    
+    标题: {title}
+    
+    请从以下几个方面进行分析：
+    1. 标题核心概念：分析标题中的核心概念和术语，提取可用于检索的关键词
+    2. 行业背景：相关行业的发展现状和趋势，提取行业特定术语
+    3. 技术维度：涉及的关键技术和创新点，提取技术专有名词
+    4. 市场维度：市场规模、竞争格局和发展前景，提取市场相关术语
+    5. 政策环境：相关政策法规和监管趋势，提取政策关键词和文件名称
+    6. 扩展标题：在保持原意的基础上，提供更全面的标题表述
+    
+    请以JSON格式返回分析结果，包含以下字段：
+    - expanded_title: 扩展后的标题，更全面且包含更多检索信息
+    - search_keywords: 用于检索的关键词列表，按重要性排序
+    - policy_terms: 政策相关术语和文件名称列表
+    - industry_terms: 行业特定术语列表
+    - technical_terms: 技术专有名词列表
+    
+    所有关键词应当简洁、精准，适合用于ES全文检索。请直接输出有效的JSON格式，不要包含任何代码块标记或额外说明。
+    """
+    
+    response = qwen_client.chat.completions.create(
+        model="qwen-max-latest",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.6,
+        response_format={"type": "json_object"},
 
-
-
+    )
+    
+    content = response.choices[0].message.content
+    try:
+        json_content = json.loads(content)
+        # 计算成本
+        input_cost = (response.usage.prompt_tokens / 1000) * 0.0024
+        output_cost = (response.usage.completion_tokens / 1000) * 0.0096
+        cost = input_cost + output_cost
+        return json_content, cost
+    except json.JSONDecodeError:
+        # 如果解析失败，使用format_agent进行格式化
+        formatted_json = json_format_agent(content)
+        # 计算成本
+        input_cost = (response.usage.prompt_tokens / 1000) * 0.0024
+        output_cost = (response.usage.completion_tokens / 1000) * 0.0096
+        cost = input_cost + output_cost
+        return formatted_json, cost
 
 
 if __name__ == "__main__":
@@ -565,9 +636,17 @@ if __name__ == "__main__":
     # # print(json.dumps(content, ensure_ascii=False, indent=2))
     # print(1)
     title = "AI芯片市场分析"
-    focus_points = "一级关注点:市场规模分析(二级关注点:市场规模、二级关注点:市场发展速度)，一级关注点:市场机会评估(二级关注点:市场吸引力/增长潜力)"
-    toc, cost, toc_qwen = generate_toc_from_focus_points(title, focus_points)
-    print(toc)
+    result, cost = semantic_enhancement_agent(title)
+    print(result)
     print(cost)
-    print(toc_qwen)
+
+
+    # result, text= title_augement(title)
+    # print(result)
+    # print(text)
+    # focus_points = "一级关注点:市场规模分析(二级关注点:市场规模、二级关注点:市场发展速度)，一级关注点:市场机会评估(二级关注点:市场吸引力/增长潜力)"
+    # toc, cost, toc_qwen = generate_toc_from_focus_points(title, focus_points)
+    # print(toc)
+    # print(cost)
+    # print(toc_qwen)
     

@@ -52,8 +52,8 @@ def json_format_agent(original_text):
         # 如果解析失败，返回原始内容
         return {"error": "无法解析为JSON", "raw_content": content}
 
-if __name__ == "__main__":
-    text = "\n\n```json\n{\n  \"expanded_title\": \"人工智能芯片技术发展、应用场景及全球市场格局分析（2023-2030）\",\n  \"keywords\": {\n    \"core_keywords\": [\n      \"AI芯片\",\n      \"半导体产业\",\n      \"算力基础设施\",\n      \"市场格局分析\"\n    ],\n    \"domain_keywords\": [\n      \"云计算数据中心\",\n      \"智能驾驶系统\",\n      \"边缘计算设备\",\n      \"芯片架构创新\"\n    ],\n    \"focus_keywords\": [\n      \"算力需求激增\",\n      \"国产替代进程\",\n      \"美国出口管制\",\n      \"异构计算发展\"\n    ]\n  }\n}"
+# if __name__ == "__main__":
+#     text = "\n\n```json\n{\n  \"expanded_title\": \"人工智能芯片技术发展、应用场景及全球市场格局分析（2023-2030）\",\n  \"keywords\": {\n    \"core_keywords\": [\n      \"AI芯片\",\n      \"半导体产业\",\n      \"算力基础设施\",\n      \"市场格局分析\"\n    ],\n    \"domain_keywords\": [\n      \"云计算数据中心\",\n      \"智能驾驶系统\",\n      \"边缘计算设备\",\n      \"芯片架构创新\"\n    ],\n    \"focus_keywords\": [\n      \"算力需求激增\",\n      \"国产替代进程\",\n      \"美国出口管制\",\n      \"异构计算发展\"\n    ]\n  }\n}"
 
-    formatted_json = format_agent(text)
-    print(json.dumps(formatted_json, ensure_ascii=False, indent=2))
+#     formatted_json = format_agent(text)
+#     print(json.dumps(formatted_json, ensure_ascii=False, indent=2))

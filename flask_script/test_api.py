@@ -42,22 +42,44 @@ def stage_0_stream_get_keywords(url="http://localhost:5001/augment_title", title
                     # 根据不同事件类型打印不同颜色的输出
                     if 'event_type' in locals():
                         if event_type == 'think':
-                            print("\033[90m" + content + "\033[0m", end='', flush=True)  # 灰色
-                        elif event_type == 'title':
-                            print("\033[30m" + content + "\033[0m", end='', flush=True)  # 黑色
-                        elif event_type == 'keyword':
-                            print("\033[30m" + content + "\033[0m", end='', flush=True)  # 黑色
+                            print(content, end='', flush=True)
+                        # elif event_type == 'title':
+                        #     print(content, end='', flush=True)
+                        # elif event_type == 'keyword':
+                        #     print(content, end='', flush=True)
                         elif event_type == 'result':
-                            print("\033[30m" + content + "\033[0m", end='', flush=True)  # 黑色
+                            # print(content, end='', flush=True)
                             try:
                                 final_json = json.loads(content)
                             except json.JSONDecodeError:
                                 pass
 
         if final_json:
-            print("\n最终结果:")
-            # print(json.dumps(final_json, ensure_ascii=False, indent=2))
-            return json.dumps(final_json, ensure_ascii=False, indent=2)
+            # 输出扩展标题
+            # print("\n扩展标题:", final_json.get("expanded_title", ""))
+            
+            # 输出关键词
+            print("\n关键词:")
+            keywords = final_json.get("keywords", {})
+            print(keywords)
+            # for key, values in keywords.items():
+            #     print(f"- {key}: {', '.join(values)}")
+            #
+            # # 输出政策列表
+            # policy_list = final_json.get("policy_list", [])
+            # if policy_list:
+            #     print("\n相关政策:")
+            #     for i, policy in enumerate(policy_list, 1):
+            #         print(f"{i}. {policy.get('title', '')}")
+            
+            # # 输出相关报告ID
+            # report_ids = final_json.get("report_ids_list", [])
+            # if report_ids:
+            #     print("\n相关报告ID:")
+            #     for i, report_id in enumerate(report_ids, 1):
+            #         print(f"{i}. {report_id}")
+            
+            return final_json
 
     except requests.exceptions.ConnectionError:
         print("错误: 无法连接到服务器。请确保服务器正在运行。")
@@ -67,7 +89,25 @@ def stage_0_stream_get_keywords(url="http://localhost:5001/augment_title", title
 
 if __name__ == "__main__":
     # 可以在这里修改URL和测试标题
-    thins = stage_0_stream_get_keywords()
-    print(thins)
+    # result = stage_0_stream_get_keywords()
     # 如果要测试远程服务器，可以使用:
     # test_stream_api("http://服务器IP:5000/augment_title", "远程测试标题")
+    import requests
+    import json
+
+    # API 地址
+    url = "http://localhost:5001/search_policy"
+
+    # 请求参数
+    payload = {
+        "title": "新能源汽车产业发展趋势分析",
+        "size": 10
+    }
+
+    # 发送 POST 请求
+    response = requests.post(url, json=payload)
+
+    # 打印响应结果
+    print("状态码:", response.status_code)
+    print("响应内容:")
+    print(json.dumps(response.json(), ensure_ascii=False, indent=2))
