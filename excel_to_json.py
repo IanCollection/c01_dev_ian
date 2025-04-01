@@ -22,7 +22,7 @@ def excel_to_optimized_json(excel_file):
         # 如果二级关注点不存在，创建它
         if 二级关注点 not in hierarchy[一级关注]:
             hierarchy[一级关注][二级关注点] = {
-                "详情": row['二级关注详情'],
+                # "详情": row['二级关注详情'],
                 "工具": {
                     "分析模型": [],
                     "写作框架": []

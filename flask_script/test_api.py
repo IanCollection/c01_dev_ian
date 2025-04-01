@@ -1,113 +1,121 @@
 import requests
 import json
-import time
 
-def stage_0_stream_get_keywords(url="http://localhost:5001/augment_title", title="人工智能在金融领域的应用"):
-    """
-    测试流式输出API
-
-    Args:
-        url (str): API的URL地址
-        title (str): 要测试的研报标题
-    """
-    headers = {"Content-Type": "application/json"}
-    data = {"title": title}
-
-    try:
-        response = requests.post(url, headers=headers, json=data, stream=True)
-
-        if response.status_code != 200:
-            print(response.text)
-            return
-
-        full_output = ""
-        chunk_count = 0
-        final_json = {}
-
-        # 迭代响应的每一行
-        for line in response.iter_lines():
-            if line:
-                line_text = line.decode('utf-8')
-                
-                # 解析事件类型和数据
-                if line_text.startswith('event: '):
-                    event_type = line_text[7:]  # 获取事件类型
-                    continue
-                
-                if line_text.startswith('data: '):
-                    content = line_text[6:]  # 移除 "data: " 前缀
-                    full_output += content
-                    chunk_count += 1
-
-                    # 根据不同事件类型打印不同颜色的输出
-                    if 'event_type' in locals():
-                        if event_type == 'think':
-                            print(content, end='', flush=True)
-                        # elif event_type == 'title':
-                        #     print(content, end='', flush=True)
-                        # elif event_type == 'keyword':
-                        #     print(content, end='', flush=True)
-                        elif event_type == 'result':
-                            # print(content, end='', flush=True)
-                            try:
-                                final_json = json.loads(content)
-                            except json.JSONDecodeError:
-                                pass
-
-        if final_json:
-            # 输出扩展标题
-            # print("\n扩展标题:", final_json.get("expanded_title", ""))
-            
-            # 输出关键词
-            print("\n关键词:")
-            keywords = final_json.get("keywords", {})
-            print(keywords)
-            # for key, values in keywords.items():
-            #     print(f"- {key}: {', '.join(values)}")
-            #
-            # # 输出政策列表
-            # policy_list = final_json.get("policy_list", [])
-            # if policy_list:
-            #     print("\n相关政策:")
-            #     for i, policy in enumerate(policy_list, 1):
-            #         print(f"{i}. {policy.get('title', '')}")
-            
-            # # 输出相关报告ID
-            # report_ids = final_json.get("report_ids_list", [])
-            # if report_ids:
-            #     print("\n相关报告ID:")
-            #     for i, report_id in enumerate(report_ids, 1):
-            #         print(f"{i}. {report_id}")
-            
-            return final_json
-
-    except requests.exceptions.ConnectionError:
-        print("错误: 无法连接到服务器。请确保服务器正在运行。")
-    except Exception as e:
-        print(f"错误: {str(e)}")
-
-
-if __name__ == "__main__":
-    # 可以在这里修改URL和测试标题
-    # result = stage_0_stream_get_keywords()
-    # 如果要测试远程服务器，可以使用:
-    # test_stream_api("http://服务器IP:5000/augment_title", "远程测试标题")
-    import requests
-    import json
-
+def test_build_overview():
     # API 地址
-    url = "http://localhost:5001/search_policy"
+    url = "http://localhost:5009/build_overview_with_report"
 
     # 请求参数
     payload = {
-        "title": "新能源汽车产业发展趋势分析",
-        "size": 10
+        "title": "2025年童车行业市场分析",
+        "purpose": "洞察市场趋势"
     }
 
-    # 发送 POST 请求
-    response = requests.post(url, json=payload)
+    # 设置headers接收SSE (Server-Sent Events)
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream"
+    }
 
-    # 打印响应结果
-    print("状态码:", response.status_code)
-    print("响应内容:")
-    print(json.dumps(response.json(), ensure_ascii=False, indent=2))
+    try:
+        # 发送POST请求并设置stream=True
+        response = requests.post(url, json=payload, headers=headers, stream=True)
+        response.encoding = 'utf-8'  # 设置响应编码为utf-8
+        
+        # 检查响应状态
+        if response.status_code != 200:
+            print(f"错误: 状态码 {response.status_code}")
+            print(response.text)
+            return
+
+        event_type = None  # 初始化事件类型变量
+        
+        # 处理流式响应
+        for line in response.iter_lines(decode_unicode=True):
+            if line:
+                # 解析SSE格式
+                if line.startswith("event:"):
+                    event_type = line.split(":", 1)[1].strip()
+                elif line.startswith("data:"):
+                    data = line.split(":", 1)[1].strip()
+                    try:
+                        # 根据不同的事件类型处理数据
+                        if event_type == "think":
+                            print("\n思考过程:", data.encode('utf-8').decode('utf-8'))
+                        elif event_type == "title":
+                            print("\n扩展标题:", data.encode('utf-8').decode('utf-8'))
+                        elif event_type == "keyword":
+                            print("\n关键词:", data.encode('utf-8').decode('utf-8'))
+                        elif event_type == "result":
+                            result = json.loads(data)
+                            print("\n最终结果:")
+                            print(json.dumps(result, ensure_ascii=False, indent=2))
+                    except json.JSONDecodeError as e:
+                        print(f"JSON解析错误: {e}")
+                        print(f"原始数据: {data}")
+                    except UnicodeError as e:
+                        print(f"编码错误: {e}")
+                        print(f"原始数据: {data}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"请求错误: {e}")
+
+
+
+def test_query_filenode_get_report_info():
+    """
+    测试批量查询多个file_node_id的文件节点及其关联信息API
+    """
+    url = "http://localhost:5009/query_filenode_get_report_info"
+    
+    # 准备请求数据
+    payload = {
+        "file_node_ids": [
+            3587744,
+            3480384,
+            3762280,
+            3744296,
+            3950186,
+            3296593,
+            4124275,
+            3489687,
+            3761561,
+            3564347
+        ]
+    }
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        # 发送POST请求
+        response = requests.post(url, json=payload, headers=headers)
+        
+        # 检查响应状态
+        if response.status_code != 200:
+            print(f"错误: 状态码 {response.status_code}")
+            print(response.text)
+            return
+        
+        # 解析响应数据
+        result = response.json()
+        
+        # 打印结果
+        print("查询结果:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        
+    except requests.exceptions.RequestException as e:
+        print(f"请求错误: {e}")
+    except json.JSONDecodeError as e:
+        print(f"JSON解析错误: {e}")
+        print(f"原始响应: {response.text}")
+
+
+
+
+
+if __name__ == "__main__":
+    # test_build_overview()
+    # test_query_filenode_get_report_info()
+    print(1)

@@ -1,3 +1,11 @@
+import os
+import sys
+
+# 添加项目根目录到Python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)  # 假设当前文件在项目根目录的子目录中
+sys.path.append(project_root)
+
 from neo4j import GraphDatabase
 import os
 from dotenv import load_dotenv
@@ -5,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_neo4j_driver():
+    
     """获取Neo4j数据库连接"""
     uri = os.environ.get("NEO4J_URI")
     username = os.environ.get("NEO4J_USERNAME")
@@ -14,28 +23,28 @@ def get_neo4j_driver():
         raise ValueError("错误：缺少Neo4j连接配置，请检查环境变量")
         
     return GraphDatabase.driver(uri, auth=(username, password))
-
 def query_file_batch_nodes(file_node_ids):
     """
-    批量查询多个file_node_id的文件节点及其关联信息
+    批量查询多个file_node_id的文件节点及其关联信息，包括AllHeaders的内容
     
     Args:
         file_node_ids (list): 文件节点ID列表
         
     Returns:
-        list: 包含多个文件信息的字典列表
+        list: 包含多个文件信息的字典列表，每个字典包含文件信息和headers_content
     """
         
     driver = get_neo4j_driver()
     
     try:
         with driver.session() as session:
-            # 批量查询文件节点
+            # 批量查询文件节点及其关联的AllHeaders节点
             result = session.run(
                 """
                 MATCH (f:File) 
                 WHERE f.file_node_id IN $file_node_ids
-                RETURN f
+                OPTIONAL MATCH (f)-[:HAS_ALL_HEADERS]->(ah:AllHeaders)
+                RETURN f, ah.content as headers_content
                 """,
                 file_node_ids=file_node_ids
             )
@@ -43,6 +52,11 @@ def query_file_batch_nodes(file_node_ids):
             file_infos = []
             for record in result:
                 file_info = dict(record["f"])
+                # 添加headers_content到文件信息中
+                if record["headers_content"] is not None:
+                    file_info["headers_content"] = record["headers_content"]
+                else:
+                    file_info["headers_content"] = ""
                 file_infos.append(file_info)
                 
             return file_infos
@@ -669,13 +683,88 @@ def query_file_contents_diyid(file_node_id):
     else:
         print("未找到文件或文件内容")
 
+
+def query_file_node_by_header(header_id):
+    """
+    通过header_id查询对应的File节点的file_node_id
+    
+    Args:
+        header_id (str): 标题节点ID
+        
+    Returns:
+        str: 对应的File节点的file_node_id
+    """
+    driver = get_neo4j_driver()
+    
+    try:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH (h:Header {header_id: $header_id})-[:BELONGS_TO]->(f:File)
+                RETURN f.file_node_id as file_node_id
+                """,
+                header_id=header_id
+            ).single()
+            
+            if not result:
+                return None
+                
+            return result["file_node_id"]
+            
+    except Exception as e:
+        print(f"通过header_id查询file_node_id时发生错误: {e}")
+        return None
+    finally:
+        driver.close()
+
+
+def query_content_under_header(header_id):
+    """
+    查询指定header_id下的所有content节点
+    
+    Args:
+        header_id: header节点ID
+
+    Returns:
+        list: 包含所有content节点内容和页码的列表
+    """
+    driver = get_neo4j_driver()
+    
+    try:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH (h:Header {header_id: $header_id})-[:HAS_CONTENT]->(c:Content)
+                RETURN c.content as content, c.page_idx as page_idx
+                """,
+                header_id=header_id
+            )   
+            content_list = []
+            for record in result:
+                content_list.append({
+                    "content": record["content"],
+                    "page_idx": record["page_idx"]
+                })
+            return content_list
+    except Exception as e:
+        print(f"查询content节点时发生错误: {e}")
+        return []      
+    finally:
+        driver.close()
+
+
+
+
 # 如果需要直接测试，取消下面的注释
 if __name__ == "__main__":
     # result = query_file_contents(2969078)
     # print(result)
-    result = test_query_by_header(288229945581240343)
-    print(result)
+    # result = test_query_by_header(288229945581240343)
+    # print(result)
     # query_file_contents_diyid(2969078)
 # if __name__ == "__main__":
 #     # test_relationships()
 #     print(query_by_header("288007216793911321"))
+    # header_id = 291627249210228851
+    # print(query_file_node_by_header(header_id))
+    print(query_content_under_header(291580271302541329))

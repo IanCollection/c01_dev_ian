@@ -1,0 +1,27 @@
+database:
+  host: pgm-uf61ya3k69j587m2.pg.rds.aliyuncs.com
+  port: 5432
+  database: deloitte_data
+  user: deloitte_data
+  password: R9henc1VDdtuUxBG
+
+elasticsearch:
+  host: localhost
+  port: 9200
+  user: elastic
+  password: es@c012025
+  use_ssl: false
+
+ollama:
+  host: http://localhost
+  port: 11434
+  model: bge-m3:567m
+
+tables:
+  # - name: sc_policy_detail
+  #   vector_fields:
+  #     - name: policy_summary
+  #     - name: title
+  - name: eco_info_deloitte
+    vector_fields:
+      - name: name_cn

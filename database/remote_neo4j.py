@@ -119,28 +119,96 @@ def delete_nodes(label=None, properties=None):
 
 if __name__ == "__main__":
     # 测试连接
-    with driver.session() as session:
-        result = session.run("MATCH (n) RETURN COUNT(n)")
-        for record in result:
-            print(record)
+
+    # 测试查询filename节点
+    # print("正在查询所有Filename节点...")
+    # filename_nodes = query_nodes(label="File")
+    # print(f"共查询到 {len(filename_nodes)} 个Filename节点")
+    
+    # # 显示前10个节点的属性
+    # if filename_nodes:
+    #     print("\n前10个Filename节点信息:")
+    #     for i, node in enumerate(filename_nodes[:10]):
+    #         print(f"节点 {i+1}:")
+    #         for key, value in node.items():
+    #             print(f"  {key}: {value}")
+    #         print()
+
+    # # 清空所有节点
+    # print("正在清空所有节点...")
+    delete_nodes()
+    print("节点清空完成")
+    # # 测试查询节点
+    # print("正在查询所有节点...")
+    # nodes = query_nodes()
+    # print(f"共查询到 {len(nodes)} 个节点")
+    
+    # # 显示前10个节点的属性
+    # if nodes:
+    #     print("\n前10个节点信息:")
+    #     for i, node in enumerate(nodes[:10]):
+    #         print(f"节点 {i+1}:")
+    #         for key, value in node.items():
+    #             print(f"  {key}: {value}")
+    #         print()
+
+
+    # 查询所有节点
+    print("正在查询所有节点...")
+    all_nodes = query_nodes()
+    
+    # 按节点类型分组统计
+    node_types = {}
+    for node in all_nodes:
+        # 获取节点的标签
+        labels = node.get('labels', ['未知类型'])
+        for label in labels:
+            if label not in node_types:
+                node_types[label] = 0
+            node_types[label] += 1
+    
+    # 打印统计结果        
+    print("\n节点类型统计:")
+    for label, count in node_types.items():
+        print(f"{label}: {count}个节点")
+    
+    print(f"\n总共发现{len(all_nodes)}个节点")
+    
+    # 显示每种类型节点的一个示例
+    print("\n各类型节点示例:")
+    shown_types = set()
+    for node in all_nodes:
+        labels = node.get('labels', ['未知类型'])
+        for label in labels:
+            if label not in shown_types:
+                print(f"\n{label}节点示例:")
+                for key, value in node.items():
+                    if key != 'labels':
+                        print(f"  {key}: {value}")
+                shown_types.add(label)
+
+    # with driver.session() as session:
+    #     result = session.run("MATCH (n) RETURN COUNT(n)")
+    #     for record in result:
+    #         print(record)
             
-    # 测试创建和查询节点
-    create_node("Person", {"name": "John", "age": 30})
-    nodes = query_nodes(label="Person", properties={"name": "John"})
-    print(nodes)
+    # # 测试创建和查询节点
+    # create_node("Person", {"name": "John", "age": 30})
+    # nodes = query_nodes(label="Person", properties={"name": "John"})
+    # print(nodes)
     
-    # 关闭驱动
-    driver.close()
-    # 删除测试节点
-    delete_nodes(label="Person", properties={"name": "John"})
-    # 测试查询所有节点
-    nodes = query_nodes()
-    print("所有节点:", nodes)
+    # # 关闭驱动
+    # driver.close()
+    # # 删除测试节点
+    # delete_nodes(label="Person", properties={"name": "John"})
+    # # 测试查询所有节点
+    # nodes = query_nodes()
+    # print("所有节点:", nodes)
     
-    # 测试按标签查询节点
-    nodes = query_nodes(label="File") 
-    print("File节点:", nodes)
+    # # 测试按标签查询节点
+    # nodes = query_nodes(label="File") 
+    # print("File节点:", nodes)
     
-    # 测试按属性查询节点
-    nodes = query_nodes(properties={"page_idx": 0})
-    print("page_idx为0的节点:", nodes)
+    # # 测试按属性查询节点
+    # nodes = query_nodes(properties={"page_idx": 0})
+    # print("page_idx为0的节点:", nodes)

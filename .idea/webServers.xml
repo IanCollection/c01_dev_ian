@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="b3a9607a-5581-4ae2-bb6a-59e7d2b854c6" name="c01-25">
+        <fileTransfer rootFolder="/data/code" accessType="SFTP" host="106.14.88.25" port="22" sshConfigId="baa1e450-79e9-4b20-b56f-bb732eeb7667" sshConfig="root@106.14.88.25:22 key" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="80a68e8e-0f45-4bb6-8635-1fa2425bc142" name="Ali_C01">
+        <fileTransfer rootFolder="/tmp" accessType="SFTP" host="106.14.88.25" port="22" sshConfigId="baa1e450-79e9-4b20-b56f-bb732eeb7667" sshConfig="root@106.14.88.25:22 key" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

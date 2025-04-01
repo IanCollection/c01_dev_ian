@@ -17,8 +17,10 @@ client = silicon_client
 qwen_client = qwen_client
 
 
-
-
+def title_cics(title):
+    #对title进行拆分，拆分后的title 进行语义增强，然后进行合并。
+    #最后返回合并后的title 打上cics 多级别标签。然后根据 cics 标签表返回所有标签结构。
+    return title
 
 def title_semantic_enhancement_agent(title):
     """
@@ -77,7 +79,6 @@ def title_semantic_enhancement_agent(title):
         output_cost = (response.usage.completion_tokens / 1000) * 0.0096
         cost = input_cost + output_cost
         return formatted_json, cost
-
 
 def policy_summary_agent(policy_content: str) -> str:
     """

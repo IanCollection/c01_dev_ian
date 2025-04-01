@@ -35,13 +35,7 @@ def parse_pdf(pdf_path: str) -> dict:
 
             # 将S3路径添加到参数中
             params["pdf_path"] = pdf_path
-            
-            # 获取文件名（不含扩展名）用于保存结果
-            # parsed_url = urlparse(pdf_path)
-            # object_key = parsed_url.path.lstrip('/')
-            # # file_name = os.path.splitext(os.path.basename(object_key))[0]
-            #
-            # 构建完整URL
+
             url = f"{base_url}?return_content_list=true&is_json_md_dump=true&return_layout=true&return_info=true&return_images=true&pdf_path={quote(pdf_path)}"
 
             payload = {}
@@ -91,7 +85,7 @@ def parse_pdf(pdf_path: str) -> dict:
             #     with open(md_content_json_path, "w", encoding="utf-8") as f:
             #         json.dump(response_data['md_content'], f, ensure_ascii=False, indent=2)
             #     print(f"Markdown内容已保存到: {md_content_json_path}")
-
+            # print(response_data)
             end_time = time.time()
             process_time = end_time - start_time
             print(f"PDF解析完成，总耗时: {process_time:.2f}秒")

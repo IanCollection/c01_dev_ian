@@ -1,0 +1,8 @@
+llama-index
+llama-index-embeddings-ollama
+sqlalchemy
+elasticsearch
+pandas
+pyyaml
+psycopg2-binary
+numpy 

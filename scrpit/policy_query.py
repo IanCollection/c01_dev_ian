@@ -220,6 +220,11 @@ def search_es_policy_v2(report_title, augement_json=False,size = 10):
     # 如果没有结果，返回0成本，同样不返回content
     return formatted_results, 0
 
+
+
+
+
+
 if __name__ == "__main__":
     augement_json = {'expanded_title': '全球及中国AI芯片市场分析：技术趋势、竞争格局与政策驱动下的发展前景', 'search_keywords': ['AI芯片', '人工智能芯片', '芯片市场', '半导体产业', 'AI硬件', '算力芯片', 'GPU', 'ASIC', 'FPGA', '市场分析', '技术创新', '政策支持'], 'policy_terms': ['国家集成电路产业发展推进纲要', '十四五规划', '人工智能发展规划', '芯片国产化政策', '出口管制条例', '科技自主创新政策', '美国芯片法案'], 'industry_terms': ['半导体行业', '集成电路设计', 'EDA工具', '晶圆制造', '封装测试', '供应链安全', '高端制造', '智能制造'], 'technical_terms': ['深度学习加速器', '神经网络处理器', '异构计算', '7nm工艺', '5nm工艺', '边缘计算芯片', '云端AI芯片', 'TPU', 'NPU', 'HBM内存', '低功耗设计']}
     print(search_es_policy_v2("2024年AI市场",augement_json,10))

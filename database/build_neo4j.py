@@ -333,7 +333,6 @@ def build_neo4j_nodes(json_data, images_map, id, title, org_name, file_url, publ
                     )
                 )
                 
-            print(f"成功创建文件节点及其相关内容，图片路径已更新为绝对URL")
             return filename_dict, headers_dict, content_dict
     finally:
         driver.close()
