@@ -33,7 +33,7 @@ def build_overview_with_report(input_title,purpose = None):
     # 将输入标题和关键词拼接起来
     combined_title = f"{input_title} - {keywords_str}"
     #根据new_title来查询filename_faiss,返回前10相似的研报，然后查询neo4j 的file节点，对所有研报进行总结。获得一个根据历史研报总结出来的标题
-    relative_reports = search(input_title,index_type='filename',top_k=30)
+    relative_reports = search(input_title,index_type='filename',top_k=10)
     return new_title,relative_reports,keywords,time
 
     # file_node_ids = [report['file_node_id'] for report in relative_reports]

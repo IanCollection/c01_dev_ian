@@ -1354,7 +1354,7 @@ def overview_conclusion(overview1, overview2, title):
         )
         
         overview = completion.choices[0].message.content
-        
+      
         # 计算成本
         input_cost = (completion.usage.prompt_tokens / 1000) * 0.0024
         output_cost = (completion.usage.completion_tokens / 1000) * 0.0096
@@ -1400,7 +1400,7 @@ def generate_analysis_methods(current_concat_heading):
             response_format={"type": "json_object"},
             temperature=0.6
         )
-        
+        time.sleep(0.5)
         # 验证返回格式
         analysis_methods = completion.choices[0].message.content
         if not analysis_methods.startswith('{') or not analysis_methods.endswith('}'):

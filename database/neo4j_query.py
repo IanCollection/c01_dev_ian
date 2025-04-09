@@ -718,6 +718,40 @@ def query_file_node_by_header(header_id):
         driver.close()
 
 
+def query_file_node_and_name_by_header(header_id):
+    """
+    通过header_id查询对应的File节点的file_node_id
+
+    Args:
+        header_id (str): 标题节点ID
+
+    Returns:
+        str: 对应的File节点的file_node_id
+    """
+    driver = get_neo4j_driver()
+
+    try:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH (h:Header {header_id: $header_id})-[:BELONGS_TO]->(f:File)
+                RETURN f.file_node_id as file_node_id, f.name as file_name
+                """,
+                header_id=header_id
+            ).single()
+
+            if not result:
+                return None
+
+            return result["file_node_id"], result["file_name"]
+
+    except Exception as e:
+        print(f"通过header_id查询file_node_id时发生错误: {e}")
+        return None
+    finally:
+        driver.close()
+
+
 def query_content_under_header(header_id):
     """
     查询指定header_id下的所有content节点
@@ -741,10 +775,13 @@ def query_content_under_header(header_id):
             )   
             content_list = []
             for record in result:
-                content_list.append({
-                    "content": record["content"],
-                    "page_idx": record["page_idx"]
-                })
+                content = record["content"]
+                # 只有当内容长度大于等于30且不为空时才存储
+                if content and len(content) >= 30:
+                    content_list.append({
+                        "content": content,
+                        "page_idx": record["page_idx"]
+                    })
             return content_list
     except Exception as e:
         print(f"查询content节点时发生错误: {e}")
