@@ -15,6 +15,9 @@ def analyze_eco_indicators(data_list):
 
         # 将period_date转换为datetime格式
         df['period_date'] = pd.to_datetime(df['period_date'])
+        
+        # 确保data_value列为数值类型，将None值转换为NaN
+        df['data_value'] = pd.to_numeric(df['data_value'], errors='coerce')
 
         # 按name_cn分组进行分析
         grouped_data = df.groupby('name_cn')
@@ -23,20 +26,43 @@ def analyze_eco_indicators(data_list):
         for name, group in grouped_data:
             # 按时间排序
             group = group.sort_values('period_date')
+            
+            # 过滤掉NaN值
+            valid_data = group.dropna(subset=['data_value'])
+            
+            # 如果没有有效数据，则跳过此指标
+            if len(valid_data) == 0:
+                continue
+                
+            # 安全获取第一个和最后一个值
+            first_value = valid_data['data_value'].iloc[0] if len(valid_data) > 0 else np.nan
+            last_value = valid_data['data_value'].iloc[-1] if len(valid_data) > 0 else np.nan
+            
+            # 计算趋势
+            if pd.notna(first_value) and pd.notna(last_value):
+                trend = '上升' if last_value > first_value else '下降'
+            else:
+                trend = '无法确定'
+            
+            # 安全计算年均增长率
+            try:
+                growth_rate = float(valid_data['data_value'].pct_change().mean() * 100)
+            except:
+                growth_rate = np.nan
 
             # 计算基本统计量
             stats = {
                 '指标名称': name,
-                '数据时间范围': f"{group['period_date'].min().strftime('%Y-%m-%d')} 至 {group['period_date'].max().strftime('%Y-%m-%d')}",
-                '数据点数量': len(group),
-                '最新值': float(group['data_value'].iloc[-1]),
-                '平均值': float(group['data_value'].mean()),
-                '中位数': float(group['data_value'].median()),
-                '最大值': float(group['data_value'].max()),
-                '最小值': float(group['data_value'].min()),
-                '标准差': float(group['data_value'].std()),
-                '变化趋势': '上升' if group['data_value'].iloc[-1] > group['data_value'].iloc[0] else '下降',
-                '年均增长率': float(group['data_value'].pct_change().mean() * 100)
+                '数据时间范围': f"{valid_data['period_date'].min().strftime('%Y-%m-%d')} 至 {valid_data['period_date'].max().strftime('%Y-%m-%d')}",
+                '数据点数量': len(valid_data),
+                '最新值': float(last_value),
+                '平均值': float(valid_data['data_value'].mean()),
+                '中位数': float(valid_data['data_value'].median()),
+                '最大值': float(valid_data['data_value'].max()),
+                '最小值': float(valid_data['data_value'].min()),
+                '标准差': float(valid_data['data_value'].std()),
+                '变化趋势': trend,
+                '年均增长率': growth_rate
             }
 
             analysis_results.append(stats)

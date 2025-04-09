@@ -117,6 +117,18 @@ def query_ic_trend_score(cics_ids, year: Union[str, List[str]]) -> List[dict]:
             logger.warning("输入的CICS ID为空")
             return []
             
+        # 确保cics_ids是列表类型
+        if not isinstance(cics_ids, (list, tuple)):
+            cics_ids = [cics_ids]
+            
+        # 过滤空值和非法值
+        cics_ids = [str(cid) for cid in cics_ids if cid is not None]
+        
+        # 如果过滤后列表为空，返回空列表
+        if not cics_ids:
+            logger.warning("过滤空值后的CICS ID列表为空")
+            return []
+            
         # 连接数据库
         connection = psycopg2.connect(
             host="pgm-uf61ya3k69j587m2.pg.rds.aliyuncs.com",
@@ -126,38 +138,16 @@ def query_ic_trend_score(cics_ids, year: Union[str, List[str]]) -> List[dict]:
             password="R9henc1VDdtuUxBG"
         )
         cursor = connection.cursor()
-        # connection = pymysql.connect(
-        #     host="120.24.20.49",
-        #     port=33062,
-        #     database="irsip_db",
-        #     user="irsip_db",
-        #     password="e7J5yzdNcVAgqBz6"
-        # )
-        # cursor = connection.cursor()
-        #
-        # 根据输入类型构建查询条件
-        if isinstance(cics_ids, str):
-            cics_ids = [cics_ids]
-            
-        # 过滤空值和非法值
-        cics_ids = [cid for cid in cics_ids if cid]
-        
-        # 如果过滤后列表为空，返回空列表
-        if not cics_ids:
-            logger.warning("过滤空值后的CICS ID列表为空")
-            return []
             
         # 构建IN查询的参数占位符
         placeholders = ','.join(['%s'] * len(cics_ids))
         
-        # print('开始查询')
         # 构建查询语句
         query = f"""
             SELECT ts.*, c.name AS cics_name 
             FROM ic_trend_scores ts
             JOIN ic_cics c ON ts.cics_id = c.id
             WHERE ts.cics_id IN ({placeholders}) 
---             AND YEAR(ts.date) = {year}
         """
         
         # 执行查询
@@ -187,7 +177,6 @@ def query_ic_trend_score(cics_ids, year: Union[str, List[str]]) -> List[dict]:
                     
             indicators_data.append(indicator)
 
-        # print(f'indicators_data:{indicators_data}')
         return indicators_data
         
     except Exception as e:
@@ -199,6 +188,7 @@ def query_ic_trend_score(cics_ids, year: Union[str, List[str]]) -> List[dict]:
             cursor.close()
         if 'connection' in locals() and connection:
             connection.close()
+
 def query_ic_current_rating(cics_ids, year):
     """
     根据CICS ID和年份查询ic_current_rating表中的指标数据
@@ -216,16 +206,19 @@ def query_ic_current_rating(cics_ids, year):
             logger.warning("输入的CICS ID为None")
             return []
             
+        # 确保cics_ids是列表类型
+        if not isinstance(cics_ids, (list, tuple)):
+            cics_ids = [cics_ids]
+            
+        # 过滤空值
+        cics_ids = [str(cid) for cid in cics_ids if cid is not None]
+        
+        # 如果过滤后列表为空，返回空列表
+        if not cics_ids:
+            logger.warning("过滤空值后的CICS ID列表为空")
+            return []
             
         # 连接数据库
-        # connection = pymysql.connect(
-        #     host="120.24.20.49",
-        #     port=33062,
-        #     database="irsip_db",
-        #     user="irsip_db",
-        #     password="e7J5yzdNcVAgqBz6"
-        # )
-        # cursor = connection.cursor()
         connection = psycopg2.connect(
             host="pgm-uf61ya3k69j587m2.pg.rds.aliyuncs.com",
             port=5432,
@@ -234,18 +227,6 @@ def query_ic_current_rating(cics_ids, year):
             password="R9henc1VDdtuUxBG"
         )
         cursor = connection.cursor()
-
-        # 根据输入类型构建查询条件
-        if isinstance(cics_ids, str):
-            cics_ids = [cics_ids]
-            
-        # 过滤空值
-        cics_ids = [cid for cid in cics_ids if cid]
-        
-        # 如果过滤后列表为空，返回空列表
-        if not cics_ids:
-            logger.warning("过滤空值后的CICS ID列表为空")
-            return []
             
         # 构建IN查询的参数占位符
         placeholders = ','.join(['%s'] * len(cics_ids))
@@ -275,7 +256,7 @@ def query_ic_current_rating(cics_ids, year):
             return []
             
         # 获取列名
-        column_names = [desc[0] for desc in cursor.description]  # 直接从cursor.description获取列名
+        column_names = [desc[0] for desc in cursor.description]
         
         # 构建返回结果
         indicators_data = []

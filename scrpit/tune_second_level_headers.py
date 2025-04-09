@@ -2,12 +2,15 @@ import time
 import os
 import sys
 
+from Agent.tool_agents import code_title_spliter
+
 # 添加项目根目录到Python路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)  # 假设当前文件在项目根目录的子目录中
 sys.path.append(project_root)
 
-from Agent.Overview_agent import tuning_second_heading, tuning_first_heading
+from Agent.Overview_agent import tuning_second_heading, tuning_first_heading, get_ana_instruction_for_first_level, \
+    get_ana_instruction_for_second_level
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -57,18 +60,41 @@ def print_hierarchical_titles(report_content):
     print("\n层次化标题打印完成\n")
     return report_content
 
+# def modify_second_title(second_level):
+#     # 获取当前二级标题下的所有三级标题
+#     third_level_titles = [sec.get('title', '无标题') for sec in second_level.get('subsections', [])]
+#
+#     # 这里可以调用大模型来修改标题，暂时用简单的字符串处理作为示例
+#     original_title = second_level.get('title', '无标题')
+#     modified_title = tuning_second_heading(third_level_titles, original_title)
+#     ana_instruction = get_ana_instruction_for_second_level(third_level_titles,modified_title)
+#     print(f"优化后的二级标题: {modified_title}")
+#     # 更新二级标题，并保留原始标题
+#     second_level['previous_title'] = original_title
+#     second_level['title'] = modified_title
+#     second_level['ana_instruction'] = ana_instruction
+#     return second_level
+
 def modify_second_title(second_level):
     # 获取当前二级标题下的所有三级标题
     third_level_titles = [sec.get('title', '无标题') for sec in second_level.get('subsections', [])]
-    
+
     # 这里可以调用大模型来修改标题，暂时用简单的字符串处理作为示例
     original_title = second_level.get('title', '无标题')
     modified_title = tuning_second_heading(third_level_titles, original_title)
-    print(f"优化后的二级标题: {modified_title}")
+    ana_instruction = get_ana_instruction_for_second_level(third_level_titles, modified_title)
+
+    # print(f"优化后的二级标题: {modified_title}")
+
+    title_code,modified_pure_title = code_title_spliter(modified_title)
+
     # 更新二级标题，并保留原始标题
     second_level['previous_title'] = original_title
-    second_level['title'] = modified_title
+    second_level['title_code'] = title_code
+    second_level['title'] = modified_pure_title
+    second_level['ana_instruction'] = ana_instruction
     return second_level
+
 
 def modify_second_level_headers(report_content):
     # 使用线程池并行处理二级标题
@@ -98,18 +124,39 @@ def modify_second_level_headers_stream(report_content):
     return report_content
 
 
+# def modify_first_level_title(first_level):
+#     # 获取当前一级标题下的所有二级标题
+#     second_level_titles = [sec.get('title', '无标题') for sec in first_level.get('subsections', [])]
+#     # 这里可以调用大模型来修改标题，暂时用简单的字符串处理作为示例
+#     original_title = first_level.get('title', '无标题')
+#     modified_title = tuning_first_heading(second_level_titles, original_title)
+#     ana_instruction = get_ana_instruction_for_first_level(second_level_titles, original_title)
+#     # 更新一级标题，并保留原始标题
+#     first_level['previous_title'] = original_title
+#     first_level['title'] = modified_title
+#     first_level['ana_instruction'] = ana_instruction
+#     return first_level
+
 def modify_first_level_title(first_level):
     # 获取当前一级标题下的所有二级标题
     second_level_titles = [sec.get('title', '无标题') for sec in first_level.get('subsections', [])]
     # 这里可以调用大模型来修改标题，暂时用简单的字符串处理作为示例
     original_title = first_level.get('title', '无标题')
     modified_title = tuning_first_heading(second_level_titles, original_title)
-    
+    ana_instruction = get_ana_instruction_for_first_level(second_level_titles, original_title)
+
+    title_code,modified_pure_title = code_title_spliter(modified_title)
+
+
     # 更新一级标题，并保留原始标题
     first_level['previous_title'] = original_title
-    first_level['title'] = modified_title
-    
+    first_level['title'] = modified_pure_title
+    first_level['title_code'] = title_code
+    first_level['ana_instruction'] = ana_instruction
     return first_level
+
+
+
 
 def modify_first_level_headers(report_content):
     # 使用线程池并行处理一级标题

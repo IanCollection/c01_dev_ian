@@ -1,4 +1,3 @@
-
 import time
 import os
 import sys
@@ -7,13 +6,12 @@ import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from decimal import Decimal
-
-# 路径设置
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 sys.path.append(project_root)
 
 # 本地模块导入
+from Agent.tool_agents import code_title_spliter
 from scrpit.tune_second_level_headers import modify_second_level_headers, modify_first_level_headers, \
     modify_first_level_headers_stream, modify_second_level_headers_stream
 from database.neo4j_query import query_file_batch_nodes
@@ -86,6 +84,32 @@ def process_second_level_title(first_level_title, second_level_section):
 
     return new_second_level
 
+
+def process_second_level_title_for_edit(first_level_title, second_level_section):
+    new_second_level = {
+        "title": second_level_section["title"],
+        "subsections": [],
+    }
+
+    if not second_level_section.get("subsections"):
+        print(f"警告：{first_level_title} - {second_level_section['title']} 没有三级标题，将创建默认节点")
+        new_second_level["subsections"].append(
+            process_third_level_title(first_level_title, second_level_section["title"], {"title": "默认内容"})
+        )
+    else:
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_third_level_title, first_level_title, second_level_section["title"], sec)
+                       for sec in second_level_section["subsections"]]
+
+            for future in as_completed(futures):
+                try:
+                    if (new_third_level := future.result()):
+                        new_second_level["subsections"].append(new_third_level)
+                except Exception as e:
+                    print(f"处理三级标题时出错: {str(e)}")
+
+    return new_second_level
+
 # 三级标题处理函数
 def process_third_level_title(first_level_title, second_level_title, third_level_section,instruction = None):
     try:
@@ -94,8 +118,8 @@ def process_third_level_title(first_level_title, second_level_title, third_level
             return create_default_third_level()
 
         combined_title = f"{first_level_title} - {second_level_title} - {third_level_section['title']}"
-        year = 2023
-        # year = year_extract_from_title(combined_title)
+        # year = 2023
+        year = year_extract_from_title(combined_title)
         try:
             reports, policy, ic_trends, ic_current, instruction, eco_indicators,eco_indicators_sum,eco_indicators_report, analysis_results_ictrend_v2,filtered_result_ic_current_rating= query_relative_data_v2(year, combined_title,instruction)
 
@@ -133,12 +157,15 @@ def process_third_level_title(first_level_title, second_level_title, third_level
 
         try:
             current_new_title, _, _ = tuning_third_heading(tuning_reference, instruction, third_level_section['title'])
+            current_new_title_code, current_new_pure_title = code_title_spliter(current_new_title)
+
         except Exception as tuning_error:
             print(f"调整标题时出错 {third_level_section['title']}: {str(tuning_error)}")
             current_new_title = third_level_section['title']
 
         return {
-            "title": current_new_title,
+            'title_code':current_new_title_code,
+            "title": current_new_pure_title,
             "previous_title": third_level_section['title'],
             "relative_data": {
                 "writing_instructions": instruction,
@@ -192,7 +219,7 @@ if __name__ == "__main__":
     # 获取研报数据
     title, reports_node, keywords, time_cost = build_overview_with_report(input_title)
     relative_reports = query_file_batch_nodes(reports_node)
-    print(relative_reports)
+    # print(relative_reports)
     # 生成目录
     reports_overview, all_reports, reports_cost = generate_comprehensive_toc_v2(input_title, relative_reports, keywords)
 
@@ -208,18 +235,22 @@ if __name__ == "__main__":
     else:
         final_overview, cost = overview_conclusion(reports_overview, general_overview, input_title)
 
+    with open('final_overview.json', 'w', encoding='utf-8') as f:
+        json.dump(final_overview, f, indent=4, ensure_ascii=False, cls=DateTimeEncoder)
     # 处理章节
     content_json = extract_headlines(final_overview)
+    print(f"content_json: {content_json}")
     section_list = generate_section_list(content_json)
-    
+    print(f"section_list: {section_list}")
+
     full_section_list = []
     print(f"总共 {len(section_list)} 个一级标题需要处理")
 
     for i, section in enumerate(section_list):
         try:
             index, processed_first_level = process_first_level_title(section, i)
-            print(processed_first_level)
-            print('开始对当前的一级和二级标题进行调整。')
+            # print(processed_first_level)
+            # print('开始对当前的一级和二级标题进行调整。')
 
             modified_content_second_headings = modify_second_level_headers_stream(processed_first_level)
             # print(modified_content_second_headings)

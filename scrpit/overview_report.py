@@ -1,5 +1,6 @@
 from Agent.Overview_agent import title_augement, generate_final_toc, extract_h_single_report, generate_final_toc_v2, \
-    title_augement_without_cot, generate_final_toc_v2_stream, generate_final_toc_v2_stream_no_title
+    title_augement_without_cot, generate_final_toc_v2_stream, generate_final_toc_v2_stream_no_title, \
+    extract_h_single_report_v2
 from database.faiss_query import search
 from Agent.Overview_agent import extract_headers_from_text_qwen
 import concurrent.futures
@@ -32,7 +33,7 @@ def build_overview_with_report(input_title,purpose = None):
     # 将输入标题和关键词拼接起来
     combined_title = f"{input_title} - {keywords_str}"
     #根据new_title来查询filename_faiss,返回前10相似的研报，然后查询neo4j 的file节点，对所有研报进行总结。获得一个根据历史研报总结出来的标题
-    relative_reports = search(input_title,index_type='filename',top_k=10)
+    relative_reports = search(input_title,index_type='filename',top_k=30)
     return new_title,relative_reports,keywords,time
 
     # file_node_ids = [report['file_node_id'] for report in relative_reports]
@@ -274,7 +275,7 @@ def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, ke
 
     # 第一阶段：并行处理每个研报
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_report = {executor.submit(extract_h_single_report, report): i
+        future_to_report = {executor.submit(extract_h_single_report_v2, report, title): i
                             for i, report in enumerate(report_headers_list)}
 
         # 收集结果
@@ -292,6 +293,27 @@ def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, ke
                 # total_cost += report_cost
             except Exception as e:
                 pass
+
+    # # 第一阶段：并行处理每个研报
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    #     future_to_report = {executor.submit(extract_h_single_report, report): i
+    #                         for i, report in enumerate(report_headers_list)}
+    #
+    #     # 收集结果
+    #     for future in concurrent.futures.as_completed(future_to_report):
+    #         report_index = future_to_report[future]
+    #         try:
+    #             summary, report_cost = future.result()
+    #             report_data = {
+    #                 'policy_id': report_headers_list[report_index].get('file_node_id', ''),
+    #                 's3_url': report_headers_list[report_index].get('s3_url', ''),
+    #                 'policy_summary': summary,
+    #                 'report_name': report_headers_list[report_index].get('name', '')
+    #             }
+    #             all_summaries.append(report_data)
+    #             # total_cost += report_cost
+    #         except Exception as e:
+    #             pass
     # 收集所有生成的内容
     # 改为直接透传generate_final_toc_v2_stream的输出
     # 初始化完整内容容器

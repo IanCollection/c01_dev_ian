@@ -41,6 +41,8 @@ def print_result(hit):
     for key, value in source.items():
         if key not in important_fields and not key.endswith('_vector'):
             print(f"{key}: {value}")
+
+
 def es_vector_query(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.2, use_multi_fields=True):
     """
     执行混合搜索查询
@@ -110,7 +112,7 @@ def es_vector_query(query_text, table_name="sc_policy_detail", vector_field="tit
         return []
 
 
-def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.2, use_multi_fields=True):
+def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.8, use_multi_fields=True):
     """
     执行混合搜索查询
     
@@ -131,10 +133,14 @@ def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vecto
         processed_query = preprocess_query(query_text)
         
         # 如果启用多字段搜索，则同时搜索title和policy_summary
-        vector_fields = [vector_field]
-        if use_multi_fields and vector_field in ["title", "policy_summary"]:
-            vector_fields = ["title", "policy_summary"]
+        # vector_fields = [vector_field]
+        # if use_multi_fields and vector_field in ["title", "policy_summary"]:
+        #     vector_fields = ["title", "policy_summary"]
         
+         # 只检索title字段，忽略use_multi_fields设置
+        vector_fields = ["title"]
+
+
         # 对每个字段执行搜索并合并结果
         all_results = []
         for field in vector_fields:

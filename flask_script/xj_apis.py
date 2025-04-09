@@ -3,15 +3,11 @@ import time
 import os
 import sys
 import datetime
-
-
-
-# 添加项目根目录到Python路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)  # 假设当前文件在项目根目录的子目录中
 sys.path.append(project_root)
-
-
+from Agent.overview_agent_part2 import generate_third_level_titles, format_third_level_result_to_json, \
+    generate_second_level_titles, format_third_level_result_to_json_v2
 from scrpit.query_report_policy_ic_indicator import query_relative_data_v2
 import asyncio
 import multiprocessing
@@ -22,14 +18,23 @@ from functools import wraps
 
 import numpy as np
 from flask import Flask, request, jsonify, Response, stream_with_context
-from Agent.Overview_agent import title_augement_stream, generate_toc_from_focus_points, match_focus_points, \
-    semantic_enhancement_agent, overview_conclusion, generate_toc_from_focus_points_stream, title_augement_without_cot, \
-    generate_toc_from_focus_points_stream_no_title
+from Agent.Overview_agent import (
+    title_augement_stream, generate_toc_from_focus_points, match_focus_points,
+    semantic_enhancement_agent, overview_conclusion, generate_toc_from_focus_points_stream, 
+    title_augement_without_cot, generate_toc_from_focus_points_stream_no_title, 
+    year_extract_from_title, generate_ana_instruction
+)
 from database.neo4j_query import get_neo4j_driver
 from palyground import extract_headlines, generate_section_list
-from scrpit.milestone_4 import process_first_level_title, process_third_level_title, process_ic_trends
-from scrpit.overview_report import generate_comprehensive_toc_v2, build_overview_with_report, \
-    generate_comprehensive_toc_v2_stream, generate_final_toc_v2_stream, generate_comprehensive_toc_v2_stream_no_title
+from scrpit.milestone_4 import (
+    process_first_level_title, process_third_level_title, 
+    process_ic_trends, process_second_level_title_for_edit
+)
+from scrpit.overview_report import (
+    generate_comprehensive_toc_v2, build_overview_with_report,
+    generate_comprehensive_toc_v2_stream, generate_final_toc_v2_stream, 
+    generate_comprehensive_toc_v2_stream_no_title
+)
 from scrpit.overview_title import generate_comprehensive_toc_with_focus_points, match_focus_points_from_file
 from scrpit.policy_query import search_es_policy_v2
 from database.faiss_query import search
@@ -288,9 +293,9 @@ def overview_v2():
             # 获取初始数据
             new_title, relative_reports, keywords, time = build_overview_with_report(title, purpose)
             # 打印初步检索完成
-            yield f"event: toc_progress\ndata: {json.dumps({'status': '初步检索完成', 'title': new_title, 'keywords': keywords, 'time': time}, ensure_ascii=False)}\n\n"
+            # yield f"event: toc_progress\ndata: {json.dumps({'status': '初步检索完成', 'title': new_title, 'keywords': keywords, 'time': time}, ensure_ascii=False)}\n\n"
 
-            reports_node = search(title, index_type='filename', top_k=10)
+            reports_node = search(title, index_type='filename', top_k=20)
             # 将reports_node转换为普通Python整数列表
             reports_node = [int(node) if isinstance(node, np.int64) else node for node in reports_node]
             # 将reports_node返回给前端
@@ -302,7 +307,7 @@ def overview_v2():
             
             # 生成综合目录（流式）
             # 记录是否已发送目录内容
-            toc_content_sent = False
+            # toc_content_sent = False
             
             for chunk in generate_comprehensive_toc_v2_stream_no_title(title, relative_reports, keywords):
                 if isinstance(chunk, dict):
@@ -316,10 +321,10 @@ def overview_v2():
                         # 其他类型的数据（如状态更新）仍然使用JSON格式
                         yield f"event: {event_type}\ndata: {json.dumps(event_data, ensure_ascii=False)}\n\n"
 
-            # 如果没有发送过目录内容，输出一个错误提示
-            if not toc_content_sent:
-                yield f"event: error\ndata: {json.dumps({'error': '目录生成失败，未能获取内容'}, ensure_ascii=False)}\n\n"
-            
+            # # 如果没有发送过目录内容，输出一个错误提示
+            # if not toc_content_sent:
+            #     yield f"event: error\ndata: {json.dumps({'error': '目录生成失败，未能获取内容'}, ensure_ascii=False)}\n\n"
+            #
             # 完成事件移到最后
             yield f"event: complete\ndata: {json.dumps({'status': 'complete'}, ensure_ascii=False)}\n\n"
 
@@ -349,6 +354,7 @@ def overview_v3():
     """
     def process_sections(reports_overview, general_overview, input_title):
         # 生成最终概览
+        print('开始生成最终概览')
         if len(general_overview) >= 2:
             final_overview, _ = overview_conclusion(reports_overview, general_overview[0], input_title)
         else:
@@ -414,6 +420,7 @@ def overview_v3():
         content_type='application/json; charset=utf-8'
     )
     return response
+
 
 @app.route('/augment_title', methods=['POST'])
 @validate_json_request(['title'])
@@ -1064,7 +1071,14 @@ def query_title_info():
         else:
             # 单独处理标题
             year = 2024
-            combined_title = title
+            # year = year_extract_from_title(title)
+            # 将一级标题、二级标题和三级标题拼接在一起
+            combined_title = ""
+            if first_level_title:
+                combined_title += first_level_title
+            if second_level_title:
+                combined_title += " - " + second_level_title if combined_title else second_level_title
+            combined_title += " - " + title if combined_title else title
             reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_relative_data_v2(year, combined_title, instruction)
             
             # 处理数据
@@ -1130,13 +1144,249 @@ def query_title_info():
         return error_response
 
 
-
-
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (datetime.date, datetime.datetime)):
             return obj.isoformat()
         return super().default(obj)
+
+
+
+@app.route('/api/edit_second_level_title', methods=['POST'])
+def edit_second_level_title_section():
+    """
+    编辑二级标题的API
+    
+    请求参数:
+        first_level_title (str): 一级标题
+        second_level_section (dict): 二级标题的JSON结构
+
+    返回：
+        JSON: 包含编辑后的二级标题的JSON结构
+    """
+    try:
+        data = request.get_json()
+        first_level_title = data.get('first_level_title', '')
+        second_level_section = data.get('second_level_section', {})
+        
+        if not first_level_title or not second_level_section:
+            return jsonify({
+                "error": "缺少必要参数",
+                "status": "failed"
+            }), 400
+            
+        new_second_level = process_second_level_title_for_edit(first_level_title, second_level_section)
+        
+        result = {
+            "status": "success",
+            "data": new_second_level
+        }
+        
+        response = Response(
+            json.dumps(result, ensure_ascii=False, cls=DateTimeEncoder),
+            mimetype='application/json',
+            headers={'Content-Type': 'application/json; charset=utf-8'}
+        )
+        return response
+        
+    except Exception as e:
+        logger.error(f"编辑二级标题时出错: {str(e)}", exc_info=True)
+        error_data = {
+            "error": f"编辑二级标题时出错: {str(e)}",
+            "status": "failed"
+        }
+        
+        error_response = Response(
+            json.dumps(error_data, ensure_ascii=False, cls=DateTimeEncoder),
+            mimetype='application/json',
+            status=500,
+            headers={'Content-Type': 'application/json; charset=utf-8'}
+        )
+        return error_response
+
+
+@app.route('/edit_second_level_title', methods=['POST'])
+@validate_json_request(['second_level_json'])
+@error_handler
+def edit_second_level_title():
+    data = request.get_json()
+    title = data.get('title', '')
+    title_code = data.get('title_code', '')
+    ana_instruction = data.get('ana_instruction', '')
+
+    result = generate_third_level_titles(title, title_code, ana_instruction)
+    formatted_result = format_third_level_result_to_json(title, title_code, ana_instruction, result)
+
+    if formatted_result.get("subsections") and formatted_result["subsections"][0].get("subsections"):
+        for third_level_section in formatted_result["subsections"][0]["subsections"]:
+            combined_title = f"{formatted_result.get('title', '')} - {third_level_section.get('title', '')}"
+            year = year_extract_from_title(combined_title)
+
+            try:
+                query_result = query_relative_data_v2(year, combined_title,
+                                                      third_level_section.get("ana_instruction", ""))
+                reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+            except Exception as e:
+                print(f"错误：调用 query_relative_data_v2 时发生异常: {e}")
+                query_result = ([], [], [], [], "", [], {}, [], {}, {})
+                reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+
+            third_level_section["relative_data"] = {
+                "reference": {
+                    "report_source": reports if isinstance(reports, list) else [],
+                    "policy_source": policy if isinstance(policy, list) else [],
+                    "industry_indicator_part_1": process_ic_trends(ic_trends),
+                    "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
+                    "industry_indicator_part_2": ic_current,
+                    "industry_indicator_part_2_analysis": filtered_result_ic_current_rating if isinstance(
+                        filtered_result_ic_current_rating, dict) else {},
+                    "indicators": eco_indicators,
+                    "indicators_sum": eco_indicators_sum,
+                    "indicators_report": eco_indicators_report
+                },
+                "writing_instruction": instruction or "无具体分析思路"
+            }
+    # try:
+    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"third_level_titles_{timestamp}.json")
+    #     with open(file_path, 'w', encoding='utf-8') as f:
+    #         json.dump(formatted_result, f, ensure_ascii=False, indent=4)
+    #     print(f"已成功将结果保存为JSON文件: {file_path}")
+    # except Exception as e:
+    #     print(f"保存JSON文件时出错: {e}")
+    return jsonify({
+        "status": "success",
+        "data": formatted_result
+    }), 200
+
+
+@app.route('/edit_first_level_title', methods=['POST'])
+@validate_json_request(['first_level_json'])
+@error_handler
+def edit_first_level_title():
+    data = request.get_json()
+    input_json = data.get('first_level_json', {})
+
+    title_code = input_json.get("title_code", "")
+    title = input_json.get("title", "")
+    ana_instruction = input_json.get("ana_instruction", "")
+
+    result = generate_second_level_titles(title, title_code, ana_instruction)
+    formatted_result = format_third_level_result_to_json(title, title_code, ana_instruction, result)
+    print(json.dumps(formatted_result, indent=4, ensure_ascii=False))
+
+    # 为每个二级标题生成三级标题并添加到结果中
+    if "subsections" in formatted_result:
+        for section in formatted_result["subsections"]:
+            second_level_title = section.get("title", "")
+            section_title_code = section.get("title_code", "")
+            section_ana_instruction = section.get("ana_instruction", "")
+
+            # 生成三级标题
+            third_level_result = generate_third_level_titles(
+                second_level_title,
+                section_title_code,
+                section_ana_instruction
+            )
+
+            formatted_third_level = format_third_level_result_to_json_v2(
+                second_level_title,
+                section_title_code,
+                section_ana_instruction,
+                third_level_result
+            )
+
+            print(f"formatted_third_level: {json.dumps(formatted_third_level, indent=4, ensure_ascii=False)}")
+
+            # 处理formatted_third_level格式
+            if isinstance(formatted_third_level, str):
+                try:
+                    formatted_third_level = json.loads(formatted_third_level)
+                except json.JSONDecodeError:
+                    print(f"无法将formatted_third_level解析为JSON: {formatted_third_level}")
+                    formatted_third_level = []
+
+            if isinstance(formatted_third_level, dict):
+                if "subsections" in formatted_third_level:
+                    formatted_third_level = formatted_third_level.get("subsections", [])
+                else:
+                    formatted_third_level = [formatted_third_level]
+
+            if not isinstance(formatted_third_level, list):
+                print(f"formatted_third_level不是列表类型: {type(formatted_third_level)}")
+                formatted_third_level = []
+
+            # 处理每个三级标题
+            for index, third_level_section in enumerate(formatted_third_level):
+                print(f"third_level_section: {third_level_section}")
+
+                instruction = third_level_section.get("ana_instruction", None)
+                title_code = third_level_section.get("title_code", "")
+                third_title = third_level_section.get("title", "")
+                combined_title = formatted_result.get("title", "") + " - " + third_title
+                year = year_extract_from_title(combined_title)
+
+                try:
+                    query_result = query_relative_data_v2(year, combined_title, instruction)
+                    reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+                except Exception as e:
+                    print(f"错误：调用 query_relative_data_v2 时发生异常: {e}")
+                    reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = [], [], [], [], "", [], {}, [], {}, {}
+
+                ic_trends_analysis = process_ic_trends(ic_trends)
+                instruction = instruction or "无具体分析思路"
+                print(f"current_instruction:{instruction}")
+
+                reference = {
+                    "report_source": reports if isinstance(reports, list) else [],
+                    "policy_source": policy if isinstance(policy, list) else [],
+                    "industry_indicator_part_1": ic_trends_analysis,
+                    "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
+                    "industry_indicator_part_2": ic_current,
+                    "industry_indicator_part_2_analysis": filtered_result_ic_current_rating if isinstance(
+                        filtered_result_ic_current_rating, dict) else {},
+                    "indicators": eco_indicators,
+                    "indicators_sum": eco_indicators_sum,
+                    "indicators_report": eco_indicators_report
+                }
+
+                # 添加相关数据到三级标题
+                third_level_section["relative_data"] = {
+                    "reference": reference,
+                    "writing_instruction": instruction
+                }
+                formatted_third_level[index]["relative_data"] = third_level_section["relative_data"]
+
+            # 生成整体分析思路
+            all_third_titles = [section.get("title", "") for section in formatted_third_level if section.get("title")]
+            print(f"all_third_titles: {all_third_titles}")
+            if all_third_titles:
+                combined_titles = "、".join(all_third_titles)
+                ana_instruction = generate_ana_instruction(combined_titles)
+                print(f"ana_instruction: {ana_instruction}")
+
+            section["subsections"] = formatted_third_level
+            section["ana_instruction"] = ana_instruction
+
+    # 保存结果为JSON文件
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_filename = f"final_formatted_result_{timestamp}.json"
+
+    try:
+        with open(json_filename, 'w', encoding='utf-8') as f:
+            json.dump(formatted_result, f, ensure_ascii=False, indent=4)
+        print(f"已成功将formatted_result保存为JSON文件: {json_filename}")
+    except Exception as e:
+        print(f"保存formatted_result为JSON文件时发生错误: {e}")
+
+    return jsonify({
+        "status": "success",
+        "data": formatted_result
+    }), 200
+
+    # if __name__ == '__main__':
+    #     app.run(host='0.0.0.0', port=5009, debug=False)  # 将端口改为5001以避免与AirPlay冲突
+
 
 
 # if __name__ == '__main__':

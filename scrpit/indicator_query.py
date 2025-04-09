@@ -764,12 +764,12 @@ if __name__ == "__main__":
         # 设置是否使用SSH隧道
         USE_SSH = True
         
-        # # 测试搜索政策关系
-        # print("\n正在搜索政策关系...")
-        # policy_ids = search_policy_relation_with_sshtunnel("2024年新能源汽车")
-        # print(f"找到{len(policy_ids)}条相关政策ID")
-        # print(policy_ids[:5])  # 只显示前5个ID
-        #
+        # 测试搜索政策关系
+        print("\n正在搜索政策关系...")
+        policy_ids = search_policy_relation_with_sshtunnel("2024年新能源汽车")
+        print(f"找到{len(policy_ids)}条相关政策ID")
+        print(policy_ids[:5])  # 只显示前5个ID
+
         # 测试查询政策详情
         print("\n正在查询政策详情...")
         test_policy_id = "1966100"  # 替换为实际的政策ID
@@ -799,3 +799,5 @@ if __name__ == "__main__":
         # 确保在程序结束时关闭SSH隧道
         close_ssh_tunnel()
         print("\n程序执行完毕，已关闭所有连接")
+
+    创建数据库连接

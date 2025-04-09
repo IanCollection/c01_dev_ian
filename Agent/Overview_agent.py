@@ -516,6 +516,71 @@ def extract_h_single_report(report: Dict[str, Any]) -> Tuple[str, float]:
         return f"处理出错: {str(e)}", 0.0
 
 
+def extract_h_single_report_v2(report: Dict[str, Any], topic: str = None) -> Tuple[str, float]:
+    """
+    第一阶段：处理单个研报目录，提取关键主题和结构
+
+    Args:
+        report: 单个研报信息的字典
+        topic: 指定的主题，用于筛选相关内容
+
+    Returns:
+        Tuple[str, float]: 处理结果和处理成本
+    """
+    # 提取报告信息
+    report_id = report.get('file_node_id', 'unknown')
+    report_name = report.get('name', 'unnamed report')
+    org_name = report.get('org_name', 'unknown organization')
+    date = report.get('to_char', 'unknown date')
+    headers_content = report.get('headers_content', '')
+
+    # 限制内容长度
+    if len(headers_content) > 2000:
+        headers_content = headers_content[:2000] + "..."
+
+    # 准备提示
+    prompt = f"""
+        请提取以下研报目录中与"{topic}"相关的关键主题和结构，简明扼要地总结：
+
+        ## 研报ID: {report_id}
+        ## 研报名称: {report_name}
+        ## 机构: {org_name}
+        ## 日期: {date}
+        ## 目录内容:
+        {headers_content}
+        
+        请对以上研报目录进行分析，仅提取与"{topic}"主题相关的内容：
+        1. 与"{topic}"相关的研究领域和关键主题
+        2. 相关内容的层级结构和逻辑关系，尽可能保留目录信息
+        3. 与"{topic}"相关的行业趋势和观点
+
+        如果研报内容与"{topic}"完全不相关，请直接返回："该研报与指定主题不相关"。
+        
+        请简洁明了地总结，不要详细展开每个小节。直接输出总结内容，不要包含其他说明文字。
+    """
+
+    try:
+        # 调用qwen-turbo API进行处理
+        completion = qwen_client.chat.completions.create(
+            model="qwen-turbo",
+            messages=[
+                {"role": "system", "content": "你是一个专业的研究报告分析专家，擅长提取研报目录中与特定主题相关的核心内容和结构。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            top_p=0.1
+        )
+
+        # 计算成本
+        input_cost = (completion.usage.prompt_tokens / 1000) * 0.0003
+        output_cost = (completion.usage.completion_tokens / 1000) * 0.0006
+        cost = input_cost + output_cost
+
+        return completion.choices[0].message.content, cost
+    except Exception as e:
+        print(f"处理研报 {report_id} 时出错: {e}")
+        return f"处理出错: {str(e)}", 0.0
+
 def generate_final_toc(summaries: List[str], model='qwen-max-latest') -> Tuple[str, float]:
     """
     第二阶段：使用DeepSeek-V3基于所有摘要生成最终的综合目录
@@ -604,7 +669,7 @@ def generate_final_toc_v2(all_reports_with_summaries: List[Dict], title,core_key
             {summaries}
             要求:
             1. 使用markdown格式（#研报名称，## 一级标题，### 二级标题 #### 三级标题）
-            2. 合并相似标题，去除重复内容
+            2. 合并相似标题，去除重复内容, 标题号必须是数字
             3. 确保整个综合目录包含三级标题结构
             4. 标题简洁专业，避免口语化表达
             5. 直接输出markdown格式
@@ -777,7 +842,7 @@ def generate_final_toc_v2_stream_no_title(all_reports_with_summaries: List[Dict]
                 要求:
                 1. 使用markdown格式（# 标题，## 一级子标题，### 二级子标题 #### 三级子标题),但是跳过生成# 标题，直接生成所有下属三级子目录
                 2. 合并相似标题，去除重复内容
-                3. 确保整个综合目录包含三级标题结构
+                3. 确保整个综合目录包含三级标题结构，并且目录的标题号必须是数字
                 4. 标题简洁专业，避免口语化表达
                 5. 直接输出markdown格式，不要包含任何解释性文字、多余字符或markdown标识（如```）
                 6. 目录结构要紧密围绕"{title}"的核心主题展开
@@ -1034,7 +1099,8 @@ def generate_toc_from_focus_points(title: str, focus_points: str, keywords) -> t
     1. 先根据研报标题，参考行研报告的一般逻辑生成一个完整的三级目录结构。目录结构要符合研报写作逻辑,客观分析行业的发展现状和未来发展趋势。行业研究主要是通过综合分析特定行业的发展态势，产出深刻洞察和观点。方法论涵盖从宏观的产业层到微观的产品层的分析，对企业战略、政策制定和金融决策等产生显著影响。
     2. 再根据关注点和关键词调整目录结构,不必严格遵循关注点的层级结构。每个标题必须紧密围绕核心关注点。各级标题之间要有逻辑关联性，注意关键点是框架中必不可少的内容，你仍需要根据研报标题增加其他关注点。请在写标题时用词专业准确
     3.需要检查是否覆盖了所有重要方面，比如是否包括了产业链的上下游，是否分析了国内外市场，是否有政策、技术、市场的多维度分析。另外，用户可能需要这个目录既全面又有深度，所以三级标题要足够详细，但也不能过于冗杂。可能需要平衡各个部分的比例，确保逻辑连贯，层次分明。还要注意术语的准确性和行业热点。
-    4. 使用Markdown格式:
+    4. 标题号必须用数字
+    5. 使用Markdown格式:
        - 一级标题: # 标题
        - 二级标题: ## 标题  
        - 三级标题: ### 标题
@@ -1272,6 +1338,7 @@ def overview_conclusion(overview1, overview2, title):
         4. 使用Markdown格式
         5. 总结要全面但简洁,突出重点
         6. 研报大纲要符合研报写作逻辑，目录符合研报的结构
+        7. 每个目录的标题必须用数字，不要出现“第一部分”，“第一章“等。
         请直接返回Markdown格式的研报大纲。不要有其他任何多余字符比如'''markdown'
         """
 
@@ -1349,54 +1416,159 @@ def generate_analysis_methods(current_concat_heading):
     except Exception as e:
         print(f"生成分析思路时出错: {e}")
         return '{"analysis": ""}', 0.0
+# def conclude_from_ic_trend_score(analysis_of_ic_trend):
+#     """
+#     根据ic_trend_score指标数据总结行业景气度
+#
+#     返回:
+#         dict: 包含各行业景气度判断及整体行业景气度
+#     """
+#     prompt = """
+#     你是一个专业的行业分析师，请根据以下行业指标数据，对每个行业的景气度进行判断（高、中、低三选一），并给出简要理由。最后，根据所有行业的景气度，给出整体行业景气度的判断。
+#
+#     分析要求：
+#     1. 重点关注"综合"维度的基础统计、趋势分析和主要景气等级
+#     2. 考虑各维度的平均分、趋势变化和波动情况
+#     3. 最后给出整体行业景气度判断
+#     4. 输出格式必须为严格的JSON格式，包含以下字段：
+#        - "overall_analysis": 整体行业景气度判断及理由
+#
+#     示例输出格式：
+#     {{
+#         "overall_analysis": {{
+#             "supply_demand": "高/中/低",
+#             "reason": "整体分析理由"
+#         }},
+#         {{
+#             "capital_market": "高/中/低",
+#             "reason": "整体分析理由"
+#         }},
+#         {{
+#             "policy_direction": "高/中/低",
+#             "reason": "整体分析理由"
+#         }}
+#     }}
+#     如果没有具体字段就返回空字符串。
+#     示例输出格式：
+#     {{
+#         "overall_analysis": {{
+#             "supply_demand": "高/中/低",
+#             "reason": "整体分析理由"
+#         }},
+#         {{
+#             "capital_market": "",
+#             "reason": ""
+#         }},
+#         {{
+#             "policy_direction": "",
+#             "reason": ""
+#         }}
+#     }}
+#     以下是行业景气度分析结果：
+#     {analysis}
+#     """.format(analysis=analysis_of_ic_trend)
+#
+#     max_retries = 5
+#     retry_count = 0
+#
+#     while retry_count < max_retries:
+#         try:
+#             completion = qwen_client.chat.completions.create(
+#                 model="qwen-max-latest",
+#                 messages=[
+#                     {"role": "system", "content": "你是一个专业的行业分析师，严格按照要求生成JSON格式的行业景气度分析。"},
+#                     {"role": "user", "content": prompt}
+#                 ],
+#                 response_format={"type": "json_object"},
+#                 temperature=0.6
+#             )
+#
+#             # 解析JSON为字典
+#             analysis_result = json.loads(completion.choices[0].message.content)
+#
+#             # 计算成本
+#             input_cost = (completion.usage.prompt_tokens / 1000) * 0.0024
+#             output_cost = (completion.usage.completion_tokens / 1000) * 0.0096
+#             cost = input_cost + output_cost
+#
+#             return analysis_result, cost  # 现在返回字典而非字符串
+#
+#         except Exception as e:
+#             print(f"生成行业景气度分析时出错: {e}")
+#             # 返回结构一致的字典
+#             return {
+#                 "overall_analysis": {
+#                     "supply_demand": "",
+#                     "capital_market": "",
+#                     "policy_direction": "",
+#                     "reason": ""
+#                 }
+#             }, 0.0
+#     print(f"达到最大重试次数{max_retries}次，返回默认值")
+#     return '{"industry_analysis": [], "overall_analysis": {"prosperity_level": "", "reason": ""}}', 0.0
+# def conclude_from_ic_current_rating(ic_current_rating):
+#     [{'id': 57271, 'cics_id': 75, 'profitability_cat': '中游', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q1', 'cics_name': '土地与工程管理服务'}, {'id': 60351, 'cics_id': 75, 'profitability_cat': '中游', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q2', 'cics_name': '土地与工程管理服务'}, {'id': 57562, 'cics_id': 399, 'profitability_cat': '靠前', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q1', 'cics_name': '工程规划'}, {'id': 60642, 'cics_id': 399, 'profitability_cat': '靠前', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q2', 'cics_name': '工程规划'}]
+#     pass
 def conclude_from_ic_trend_score(analysis_of_ic_trend):
     """
     根据ic_trend_score指标数据总结行业景气度
-    
+
     返回:
         dict: 包含各行业景气度判断及整体行业景气度
     """
-    prompt = """
-    你是一个专业的行业分析师，请根据以下行业指标数据，对每个行业的景气度进行判断（高、中、低三选一），并给出简要理由。最后，根据所有行业的景气度，给出整体行业景气度的判断。
-
-    分析要求：
-    1. 重点关注"综合"维度的基础统计、趋势分析和主要景气等级
-    2. 考虑各维度的平均分、趋势变化和波动情况
-    3. 最后给出整体行业景气度判断
-    4. 输出格式必须为严格的JSON格式，包含以下字段：
+    if not analysis_of_ic_trend:
+        print("警告：没有提供行业景气度分析数据")
+        return {
+            "overall_analysis": {
+                "supply_demand": "",
+                "capital_market": "",
+                "policy_direction": "",
+                "reason": ""
+            }
+        }, 0.0
+        
+    prompt = """你是一个专业的首席行业分析师，擅长分析行业景气度，你有3个子模型分析师，分别负责分析供需价格景气度模型supply_demand、政策风向景气度模型policy_direction、资本市场景气度模型capital_market，每个模型都包含研究主题相关的几个行业的模型结果。我会给你这3个模型的整体趋势分析、季度表现、主要景气等级，你需要综合这些行业的景气度，给出整体行业景气度的判断（高/中/低），并结合这三个模型对应的描述，对研究主题相关的这几个行业做出综合的模型结果解读reason。
+<model description>供需景气度模型supply_demand：通过分析行业的产销量和盈利趋势，衡量行业在供需关系下的经营状况；政策景气度模型policy_direction：量化政策对行业的支持或限制程度，评估政策环境对行业发展的影响；资本市场景气度模型capital_market：通过股债市及投融资数据，判断资本市场对行业的资金支持和融资环境。
+分析要求：
+    1. 重点关注行业的整体趋势分析、季度表现、主要景气等级；
+    2、如果模型结果显示"无相关数据"，则不需要解读输出reason；
+    3. 解读模型结果时需要融入模型描述；
+    4. 结果解读reason中不要有数字，仅定性解读即可；
+    5. 输出格式必须为严格的JSON格式.包含以下字段：
        - "overall_analysis": 整体行业景气度判断及理由
+<example>
+示例输出格式：
+{{
+    "overall_analysis": {{
+        "supply_demand": "高/中/低",
+        "reason": "整体分析理由"
+    }},
+    {{
+        "capital_market": "高/中/低",
+        "reason": "整体分析理由"
+    }},
+    {{
+        "policy_direction": "高/中/低",
+        "reason": "整体分析理由"
+    }}
+}}
+如果没有具体字段就返回空字符串。
+示例输出格式：
+{{
+    "overall_analysis": {{
+        "supply_demand": "高/中/低",
+        "reason": "整体分析理由"
+    }},
+    {{
+        "capital_market": "",
+        "reason": ""
+    }},
+    {{
+        "policy_direction": "",
+        "reason": ""
+    }}
+}}
 
-    示例输出格式：
-    {{
-        "overall_analysis": {{
-            "supply_demand": "高/中/低",
-            "reason": "整体分析理由"
-        }},
-        {{
-            "capital_market": "高/中/低",
-            "reason": "整体分析理由"
-        }},
-        {{
-            "policy_direction": "高/中/低",
-            "reason": "整体分析理由"
-        }}
-    }}
-    如果没有具体字段就返回空字符串。
-    示例输出格式：
-    {{
-        "overall_analysis": {{
-            "supply_demand": "高/中/低",
-            "reason": "整体分析理由"
-        }},
-        {{
-            "capital_market": "",
-            "reason": ""
-        }},
-        {{
-            "policy_direction": "",
-            "reason": ""
-        }}
-    }}
     以下是行业景气度分析结果：
     {analysis}
     """.format(analysis=analysis_of_ic_trend)
@@ -1415,33 +1587,31 @@ def conclude_from_ic_trend_score(analysis_of_ic_trend):
                 response_format={"type": "json_object"},
                 temperature=0.6
             )
-            
+
             # 解析JSON为字典
             analysis_result = json.loads(completion.choices[0].message.content)
-            
+
             # 计算成本
             input_cost = (completion.usage.prompt_tokens / 1000) * 0.0024
             output_cost = (completion.usage.completion_tokens / 1000) * 0.0096
             cost = input_cost + output_cost
-            
+
             return analysis_result, cost  # 现在返回字典而非字符串
-            
+
         except Exception as e:
             print(f"生成行业景气度分析时出错: {e}")
-            # 返回结构一致的字典
-            return {
-                "overall_analysis": {
-                    "supply_demand": "",
-                    "capital_market": "",
-                    "policy_direction": "",
-                    "reason": ""
-                }
-            }, 0.0
+            retry_count += 1
+            
+    # 所有重试都失败后返回默认值
     print(f"达到最大重试次数{max_retries}次，返回默认值")
-    return '{"industry_analysis": [], "overall_analysis": {"prosperity_level": "", "reason": ""}}', 0.0
-# def conclude_from_ic_current_rating(ic_current_rating):
-#     [{'id': 57271, 'cics_id': 75, 'profitability_cat': '中游', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q1', 'cics_name': '土地与工程管理服务'}, {'id': 60351, 'cics_id': 75, 'profitability_cat': '中游', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q2', 'cics_name': '土地与工程管理服务'}, {'id': 57562, 'cics_id': 399, 'profitability_cat': '靠前', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q1', 'cics_name': '工程规划'}, {'id': 60642, 'cics_id': 399, 'profitability_cat': '靠前', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q2', 'cics_name': '工程规划'}]
-#     pass
+    return {
+        "overall_analysis": {
+            "supply_demand": "",
+            "capital_market": "",
+            "policy_direction": "",
+            "reason": ""
+        }
+    }, 0.0
 
 def get_potential_ic_trend_labels(query_text):
     try:
@@ -1501,7 +1671,7 @@ def filter_ic_current_rating(ic_current_rating, potential_ic_trend_labels):
 def conclude_from_cat_analysis(cat_analysis):
     """
     根据cat_analysis中的分类数据总结行业景气度
-    
+
     返回:
         dict: 包含盈利能力分类和财务杠杆分类的判断
     """
@@ -1513,7 +1683,7 @@ def conclude_from_cat_analysis(cat_analysis):
                 "reason": ""
             },
             "financial_cat": {
-                "level": "", 
+                "level": "",
                 "reason": ""
             }
         }, 0.0
@@ -1525,28 +1695,32 @@ def conclude_from_cat_analysis(cat_analysis):
         print(f"处理分类数据时出错: {e}")
         escaped_data = "[]"
     
+    # 将prompt定义放在try块外部，确保在except块中也能访问
     prompt = f"""
-    你是一个专业的行业分析师，请根据以下行业分类数据，对行业的盈利能力和财务杠杆水平进行判断（高/中/低），并给出简要理由：
-
-    分析要求：
-    1. 如果输入数据中没有"profitability_cat"或"financial_cat"字段，直接返回对应字段下空字符串
-    2. 分析各季度分类结果的变化趋势
-    3. 输出格式必须为严格的JSON格式，包含以下字段：
-       - "profitability_cat": 盈利能力分类判断
-       - "financial_cat": 财务杠杆分类判断
+    你是一个专业的首席行业分析师，擅长分析行业的盈利水平和杠杆水平，你有2个子模型分析师，分别负责分析行业盈利能力、行业杠杆水平，每个模型都包含研究主题相关的几个行业的模型结果，我会给你这2个模型在不同行业的模型结果及评估结果时的年度和季度。你需要综合这些行业的盈利水平和杠杆水平，给出整体行业level判断，并结合这2个模型对应的描述，对研究主题相关的这几个行业做出综合的模型结果解读reason。
+    分析思路：
+        1. 如果输入数据中没有"profitability_cat"或"financial_cat"字段，直接返回对应字段下空字符串
+        2. 解读模型结果时融入模型简要描述
+        3. 分析各季度分类结果的变化趋势
+        4. 输出格式必须为严格的JSON格式，包含以下字段：
+           - "profitability_cat": 行业盈利能力判断
+           - "financial_cat": 行业杠杆水平判断
+    模型描述
+    行业盈利能力：反映行业企业整体的赚钱能力和利润水平；
+    行业杠杆水平：衡量行业企业的负债压力与偿债能力，反映其财务稳定性和风险。
 
     示例输出格式（注意转义字符）：
     {{
-        "profitability_cat": {{
-            "level": "高/中/低",
-            "reason": "分析理由"
-        }},
-        "financial_cat": {{
-            "level": "高/中/低", 
-            "reason": "分析理由"
+       "overall_analysis": {{
+                "profitability": "靠前/中游/靠后",
+                "reason": "整体分析理由"
+            }},
+           {{
+                "financial_leverage": "高/中/低", 
+                "reason": "整体分析理由"
+            }}
         }}
     }}
-    
     以下是行业分类数据：
     {escaped_data}
     """
@@ -1561,12 +1735,12 @@ def conclude_from_cat_analysis(cat_analysis):
             response_format={"type": "json_object"},
             temperature=0.6
         )
-        
+
         # 验证返回格式
         analysis_result = completion.choices[0].message.content
         if not analysis_result.strip().startswith('{') or not analysis_result.strip().endswith('}'):
             raise ValueError("返回格式不符合JSON要求")
-        
+
         # 解析结果并验证必要字段
         result = json.loads(analysis_result)
         for key in ["profitability_cat", "financial_cat"]:
@@ -1574,14 +1748,14 @@ def conclude_from_cat_analysis(cat_analysis):
                 result[key] = {"level": "", "reason": ""}
             elif not isinstance(result[key], dict):
                 result[key] = {"level": str(result[key]), "reason": ""}
-        
+
         # 计算成本
         input_cost = (completion.usage.prompt_tokens / 1000) * 0.0024
         output_cost = (completion.usage.completion_tokens / 1000) * 0.0096
         cost = input_cost + output_cost
-        
+
         return result, cost
-        
+
     except Exception as e:
         print(f"生成分类分析时出错: {e}")
         return {
@@ -1797,33 +1971,32 @@ def tuning_first_heading(second_level_headings, original_first_level_heading):
         print(f"优化一级标题时出错: {e}")
         return original_first_level_heading
 
-
 def year_extract_from_title(title):
     """
-    从标题中提取年份信息，使用大模型识别并返回年份列表
+    从标题中提取年份信息，返回单个年份数字
     
     Args:
         title (str): 输入标题
         
     Returns:
-        list: 包含所有识别出的年份的列表，元素为字符串格式
+        int: 提取出的年份数字，如果未找到则返回None
     """
     try:
         # 构建提示词
-        prompt = f"""
-        你是一个专业的年份提取工具，请从以下标题中提取所有年份信息：
+        # current_year = datetime.now().year
 
+        prompt = f"""
+        你是一个专业的年份提取工具，请从以下标题中提取最主要的年份信息：
+        
         标题：{title}
 
         要求：
-        1. 识别标题中所有可能的年份（如2023、2024等）
+        1. 识别标题中最主要的年份（如2023、2024等）
         2. 年份格式为4位数字
-        3. 如果标题中没有年份，返回空列表
-        4. 以json格式返回结果，格式为：{{"years": [年份列表]}}
-        5. 返回的年份列表必须按时间顺序排列
-        6. 如果标题中包含年份范围（如2021-2023），需要解析为单独年份
-        7. 返回的年份必须是字符串类型
-        8. 如果标题中包含"未来"、"明年"等相对时间，需要根据当前年份推算具体年份
+        3. 如果标题中没有年份，返回{2024}
+        4. 以json格式返回结果，格式为：{{"year": 年份数字}}
+        5. 如果标题中包含年份范围（如2021-2023），优先返回最新年份
+        6. 返回的年份必须是数字类型，不是字符串
 
         请直接返回结果，不要包含其他解释。
         """
@@ -1832,22 +2005,168 @@ def year_extract_from_title(title):
         completion = qwen_client.chat.completions.create(
             model="qwen-plus",
             messages=[
-                {"role": "system", "content": "你是一个专业的研报撰写专家，你会从研报的标题判断出需要的具体年份，并返回年份列表。例如：如果标题是'2023年新能源汽车出海趋势'，那么返回的就是['2023']。如果标题是'2021年-2024年的消费洞察'，那么返回的就是['2021','2022','2023','2024']。"},
+                {"role": "system", "content": "你是一个专业的研报撰写专家，你会从研报的标题判断出需要的具体年份，并返回单个年份数字。例如：如果标题是'2023年新能源汽车出海趋势'，那么返回的就是2023。如果标题是'2021年-2024年的消费洞察'，那么返回的就是2024。"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
             response_format={"type": "json_object"}
         )
 
-        # 解析并返回年份列表
+        # 解析并返回年份数字
         result = json.loads(completion.choices[0].message.content)
-        years = result.get("years", [])
-        # 确保年份为字符串类型
-        return [str(year) for year in years] if years else []
+        year = result.get("year")
+        return year  # 直接返回数字
 
     except Exception as e:
         print(f"提取年份时出错: {e}")
-        return []
+        return None
+    
+def get_ana_instruction_for_first_level(second_level_titles, first_level_title):
+    """
+    基于所有的二级标题和当前的一级标题，生成分析思路
+    
+    Args:
+        second_level_titles (list): 二级标题列表
+        first_level_title (str): 一级标题
+        
+    Returns:
+        str: 分析思路说明
+    """
+    try:
+        # 构建提示词
+        prompt = f"""
+        你是一个专业的研报分析专家，请基于以下信息生成分析思路：
+        
+        一级标题：{first_level_title}
+        二级标题列表：{second_level_titles}
+        
+        要求：
+        1. 分析一级标题与二级标题之间的逻辑关系
+        2. 提出完善这部分内容的分析思路和建议
+        3. 指出可能的数据支持点和论证方向
+        4. 分析思路应当简洁明了，不超过100字
+        5. 重点关注如何使各二级标题更好地支撑一级标题的论点
+        
+        请直接JSON形式返回分析思路，不要包含其他解释。
+        返回格式为：{{"ana_instruction":"分析思路"}}
+        """
+        
+        
+        # 调用Qwen模型生成分析思路
+        completion = qwen_client.chat.completions.create(
+            model="qwen-max-latest",
+            messages=[
+                {"role": "system", "content": "你是一个专业的研报分析专家，擅长提供研究报告的分析思路和建议。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+        
+        # 解析JSON响应并返回分析思路
+        result = json.loads(completion.choices[0].message.content)
+        return result.get("ana_instruction", "")
+        
+    except Exception as e:
+        print(f"生成分析思路时出错: {e}")
+        return ""
+
+
+def generate_ana_instruction(all_titles):
+    """
+    基于所有的三级标题和当前的二级标题，生成分析思路
+
+    Args:
+        third_level_titles (list): 三级标题列表
+        current_second_level_title (str): 二级标题
+
+    Returns:
+        str: 分析思路说明
+    """
+    try:
+        # 构建提示词
+        prompt = f"""
+        你是一个专业的研报分析专家，请基于以下信息生成分析思路：
+
+        标题列表：{all_titles}
+        要求：
+    
+        1. 提出完善这部分内容的分析思路和建议
+        2. 指出可能的数据支持点和论证方向
+        3. 分析思路应当简洁明了，不超过100字
+
+        请直接JSON形式返回分析思路，不要包含其他解释。
+        返回格式为：{{"ana_instruction":"分析思路"}}
+        """
+
+        # 调用Qwen模型生成分析思路
+        completion = qwen_client.chat.completions.create(
+            model="qwen-max-latest",
+            messages=[
+                {"role": "system", "content": "你是一个专业的研报分析专家，擅长提供研究报告的分析思路和建议。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+
+        # 解析JSON响应并返回分析思路
+        result = json.loads(completion.choices[0].message.content)
+        return result.get("ana_instruction", "")
+
+    except Exception as e:
+        print(f"生成分析思路时出错: {e}")
+        return ""
+
+def get_ana_instruction_for_second_level(third_level_titles, current_second_level_title):
+    """
+    基于所有的三级标题和当前的二级标题，生成分析思路
+
+    Args:
+        third_level_titles (list): 三级标题列表
+        current_second_level_title (str): 二级标题
+
+    Returns:
+        str: 分析思路说明
+    """
+    try:
+        # 构建提示词
+        prompt = f"""
+        你是一个专业的研报分析专家，请基于以下信息生成分析思路：
+
+        二级标题：{current_second_level_title}
+        三级标题列表：{third_level_titles}
+
+        要求：
+        1. 分析二级标题与三级标题之间的逻辑关系
+        2. 提出完善这部分内容的分析思路和建议
+        3. 指出可能的数据支持点和论证方向
+        4. 分析思路应当简洁明了，不超过100字
+        5. 重点关注如何使各三级标题更好地支撑二级标题的论点
+
+        请直接JSON形式返回分析思路，不要包含其他解释。
+        返回格式为：{{"ana_instruction":"分析思路"}}
+        """
+
+        # 调用Qwen模型生成分析思路
+        completion = qwen_client.chat.completions.create(
+            model="qwen-max-latest",
+            messages=[
+                {"role": "system", "content": "你是一个专业的研报分析专家，擅长提供研究报告的分析思路和建议。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+
+        # 解析JSON响应并返回分析思路
+        result = json.loads(completion.choices[0].message.content)
+        return result.get("ana_instruction", "")
+
+    except Exception as e:
+        print(f"生成分析思路时出错: {e}")
+        return ""
+
     # start_time = time.time()
     # result, cost = match_focus_points(title)
     # end_time = time.time()
@@ -1862,7 +2181,6 @@ def year_extract_from_title(title):
     # print(result)
     # print(cost)
 
-
     # result, text= title_augement(title)
     # print(result)
     # print(text)
@@ -1871,4 +2189,8 @@ def year_extract_from_title(title):
     # print(toc)
     # print(cost)
     # print(toc_qwen)
-    
+
+
+if __name__ == "__main__":
+    result = year_extract_from_title("AI芯片市场分析")
+    print(result)

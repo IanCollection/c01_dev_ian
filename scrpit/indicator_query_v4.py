@@ -449,20 +449,18 @@ def get_policy_details_by_ids(policy_ids,time = None):
 
 # 示例用法
 if __name__ == "__main__":
-    # 测试打印表字段
-    # ids = search_policy_relation("新能源汽车")
-    # result = get_policy_details_by_ids(ids)
-    # print(result)
     try:
         connection, cursor = connect_to_deloitte_db()
         if connection and cursor:
-            # 查询sc_policy_relation表的行数
+            # 查询数据库中所有表名
             cursor.execute("""
                 SELECT COUNT(*) 
-                FROM sc_policy_relation
+                FROM dq_policy_data
             """)
-            row_count = cursor.fetchone()[0]
-            print(f"sc_policy_relation表共有 {row_count} 行数据")
+            tables = cursor.fetchall()
+            print("当前数据库中的表：")
+            for table in tables:
+                print(table[0])
         else:
             print("无法连接到数据库")
     except Exception as e:
@@ -472,6 +470,35 @@ if __name__ == "__main__":
             cursor.close()
         if 'connection' in locals() and connection:
             connection.close()
+    # 测试打印表字段
+    # ids = search_policy_relation("新能源汽车")
+    # result = get_policy_details_by_ids(ids)
+    # print(result)
+    # try:
+    #     connection, cursor = connect_to_deloitte_db()
+    #     if connection and cursor:
+    #         # 查询sc_policy_relation表的行数
+    #         cursor.execute("""
+    #             SELECT COUNT(*) 
+    #             FROM sc_policy_relation
+    #         """)
+    #         row_count = cursor.fetchone()[0]
+    #         print(f"sc_policy_relation表共有 {row_count} 行数据")
+    #     else:
+    #         print("无法连接到数据库")
+    # except Exception as e:
+    #     print(f"查询失败: {str(e)}")
+    # finally:
+    #     if 'cursor' in locals() and cursor:
+    #         cursor.close()
+    #     if 'connection' in locals() and connection:
+    #         connection.close()
+
+
+
+
+
+
     # policy_ids = [1964656, 1963254, 1963859, 1964636, 1963360, 1962949, 1962657, 1962242, 1962844, 1961987]
     # result = get_policy_details_by_ids(policy_ids)
     # print(result)
