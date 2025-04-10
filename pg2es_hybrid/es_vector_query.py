@@ -112,7 +112,7 @@ def es_vector_query(query_text, table_name="sc_policy_detail", vector_field="tit
         return []
 
 
-def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.8, use_multi_fields=True):
+def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.85, use_multi_fields=True):
     """
     执行混合搜索查询
     
@@ -416,7 +416,14 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=10, min_score=0.5):
                         result_dict['data_value'] = None
 
                 # 添加name_cn字段
+                # 如果name_cn包含[停]则跳过该结果
+                # if '[停]' in indic_id_name_map.get(result_dict['indic_id'], ''):
+                #     continue
                 result_dict['name_cn'] = indic_id_name_map.get(result_dict['indic_id'], '')
+                if '[停]' in result_dict['name_cn']:
+                    continue
+
+
                 result_list.append(result_dict)
             # print(f"result_list : {result_list}")
             # print(len(result_list))
@@ -508,12 +515,32 @@ def process_indicators(result_list):
 
 
 if __name__ == "__main__":
+
+    # 连接数据库
+    connection, cursor = connect_to_deloitte_db()
+    if connection and cursor:
+        try:
+            # 查询sc_policy_detail表的总行数
+            cursor.execute("SELECT COUNT(*) FROM sc_policy_detail")
+            total_rows = cursor.fetchone()[0]
+            print(f"sc_policy_detail表总行数: {total_rows}")
+            
+        except Exception as e:
+            print(f"查询sc_policy_detail表总行数时出错: {str(e)}")
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+
     # 测试查询函数
-    query_text = "2023年新能源"
-    result_list, indic_ids, indicator_info_summary = es_vector_query_eco_indicators_v2(query_text, 2024)
-    print(result_list)
-    print(indic_ids)
-    print(indicator_info_summary)
+
+    # query_text = "2023年新能源"
+    # result_list, indic_ids, indicator_info_summary = es_vector_query_eco_indicators_v2(query_text, 2024)
+    # print(result_list)
+    # print(indic_ids)
+    # print(indicator_info_summary)
 
 
     # # 连接数据库

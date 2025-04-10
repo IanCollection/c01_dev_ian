@@ -1,4 +1,5 @@
 import concurrent
+import io
 import time
 import os
 import sys
@@ -8,7 +9,7 @@ project_root = os.path.dirname(current_dir)  # 假设当前文件在项目根目
 sys.path.append(project_root)
 from Agent.overview_agent_part2 import generate_third_level_titles, format_third_level_result_to_json, \
     generate_second_level_titles, format_third_level_result_to_json_v2
-from scrpit.query_report_policy_ic_indicator import query_relative_data_v2
+from scrpit.query_report_policy_ic_indicator import query_relative_data_v2, query_relative_data_v3
 import asyncio
 import multiprocessing
 import time
@@ -47,7 +48,7 @@ from scrpit.tune_second_level_headers import modify_second_level_headers, modify
     modify_first_level_headers_stream, modify_second_level_headers_stream
 
 # 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', encoding='utf-8')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -291,9 +292,11 @@ def overview_v2():
     def generate():
         try:
             # 获取初始数据
+            print('开始生成目录')
             new_title, relative_reports, keywords, time = build_overview_with_report(title, purpose)
             # 打印初步检索完成
             # yield f"event: toc_progress\ndata: {json.dumps({'status': '初步检索完成', 'title': new_title, 'keywords': keywords, 'time': time}, ensure_ascii=False)}\n\n"
+            print('初步检索完成')
 
             reports_node = search(title, index_type='filename', top_k=20)
             # 将reports_node转换为普通Python整数列表
@@ -352,25 +355,35 @@ def overview_v3():
     返回:
         full_section_list: 处理后的完整章节列表的UTF-8编码
     """
-    def process_sections(reports_overview, general_overview, input_title):
+    # 创建日志文件
+    log_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"overview_v3_log_{log_time}.txt"
+    
+    def write_log(message):
+        """将日志信息写入文件"""
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
+
+    def process_sections(reports_overview, general_overview, topic):
         # 生成最终概览
-        print('开始生成最终概览')
+        write_log('开始生成最终概览')
         if len(general_overview) >= 2:
-            final_overview, _ = overview_conclusion(reports_overview, general_overview[0], input_title)
+            final_overview, _ = overview_conclusion(reports_overview, general_overview[0], topic)
         else:
-            final_overview, _ = overview_conclusion(reports_overview, general_overview, input_title)
+            final_overview, _ = overview_conclusion(reports_overview, general_overview, topic)
         
         # 提取章节内容
         content_json = extract_headlines(final_overview)
         section_list = generate_section_list(content_json)
         
         full_section_list = []
-        logger.info(f"开始处理章节，共 {len(section_list)} 个一级标题")
+        write_log(f"开始处理章节，共 {len(section_list)} 个一级标题")
         
         # 使用线程池并行处理章节
+        print(f"当前处理的主题是: {topic}")  # 打印当前处理的主题
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             # 提交所有章节处理任务
-            future_to_section = {executor.submit(process_single_section, section, i): i
+            future_to_section = {executor.submit(process_single_section, section, i, topic): i
                                 for i, section in enumerate(section_list)}
             
             # 收集处理结果
@@ -382,37 +395,37 @@ def overview_v3():
                     if isinstance(modified_content, bytes):
                         modified_content = modified_content.decode('utf-8')
                     full_section_list.append(modified_content)
-                    logger.info(f"章节 {section_index+1} 处理完成")
+                    write_log(f"章节 {section_index+1} 处理完成")
                 except Exception as e:
-                    logger.error(f"处理章节 {section_index+1} 时出错: {str(e)}")
+                    write_log(f"处理章节 {section_index+1} 时出错: {str(e)}")
                     continue
-                
         return full_section_list
 
-    def process_single_section(section, index):
+    def process_single_section(section, index,topic = None):
         """处理单个章节的独立函数，用于并行处理"""
         # 处理一级标题
-        _, processed_first_level = process_first_level_title(section, index)
-        logger.debug(f"处理一级标题: {processed_first_level['title']}")
+        print(f"topic: {topic}")
+        _, processed_first_level = process_first_level_title(section, index, topic)
+        write_log(f"处理一级标题: {processed_first_level['title']}")
         
         # 调整二级标题
-        modified_content_second_headings = modify_second_level_headers_stream(processed_first_level)
-        logger.debug("二级标题调整完成")
+        modified_content_second_headings = modify_second_level_headers_stream(processed_first_level, topic)
+        write_log("二级标题调整完成")
         
         # 调整一级标题
-        modified_content = modify_first_level_headers_stream(modified_content_second_headings)
-        logger.debug("一级标题调整完成")
+        modified_content = modify_first_level_headers_stream(modified_content_second_headings, topic)
+        write_log("一级标题调整完成")
         
         return modified_content
 
     # 获取请求数据
     data = request.get_json()
-    input_title = data['title']
+    topic = data['title']
     reports_overview = data['reports_overview']
     general_overview = data['general_overview']
-    
+    print(f"处理标题: {topic}")
     # 处理章节并返回UTF-8编码结果
-    full_section_list = process_sections(reports_overview, general_overview, input_title)
+    full_section_list = process_sections(reports_overview, general_overview, topic)
     
     # 修改返回方式，确保中文正确显示
     response = Response(
@@ -420,7 +433,6 @@ def overview_v3():
         content_type='application/json; charset=utf-8'
     )
     return response
-
 
 @app.route('/augment_title', methods=['POST'])
 @validate_json_request(['title'])
@@ -1053,6 +1065,7 @@ def query_title_info():
         second_level_title (str, 可选): 二级标题
         title (str): 需要检索的标题
         instruction (str, 可选): 分析思路
+        topic (str, 可选): 主题，用于更精确的相关性匹配
         
     返回:
         JSON: 包含标题相关的所有检索信息
@@ -1062,12 +1075,16 @@ def query_title_info():
     first_level_title = data.get('first_level_title', '')
     second_level_title = data.get('second_level_title', '')
     instruction = data.get('instruction', None)
+    input_title = data.get('topic')
+    
+    print(f"当前大标题：{input_title}")
     
     try:
         # 如果提供了一级和二级标题，则视为三级标题处理
         if first_level_title and second_level_title:
             third_level_section = {'title': title}
-            result = process_third_level_title(first_level_title, second_level_title, third_level_section, instruction)
+            result = process_third_level_title(first_level_title, second_level_title, third_level_section, instruction, input_title)
+            print(f"result:{result}")
         else:
             # 单独处理标题
             year = 2024
@@ -1079,7 +1096,7 @@ def query_title_info():
             if second_level_title:
                 combined_title += " - " + second_level_title if combined_title else second_level_title
             combined_title += " - " + title if combined_title else title
-            reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_relative_data_v2(year, combined_title, instruction)
+            reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_relative_data_v3(year, combined_title, instruction, input_title)
             
             # 处理数据
             ic_trends_analysis = process_ic_trends(ic_trends)
@@ -1160,6 +1177,7 @@ def edit_second_level_title_section():
     请求参数:
         first_level_title (str): 一级标题
         second_level_section (dict): 二级标题的JSON结构
+        topic (str, 可选): 主题
 
     返回：
         JSON: 包含编辑后的二级标题的JSON结构
@@ -1168,6 +1186,7 @@ def edit_second_level_title_section():
         data = request.get_json()
         first_level_title = data.get('first_level_title', '')
         second_level_section = data.get('second_level_section', {})
+        topic = data.get('topic', None)
         
         if not first_level_title or not second_level_section:
             return jsonify({
@@ -1175,7 +1194,7 @@ def edit_second_level_title_section():
                 "status": "failed"
             }), 400
             
-        new_second_level = process_second_level_title_for_edit(first_level_title, second_level_section)
+        new_second_level = process_second_level_title_for_edit(first_level_title, second_level_section, topic)
         
         result = {
             "status": "success",
@@ -1213,6 +1232,7 @@ def edit_second_level_title():
     title = data.get('title', '')
     title_code = data.get('title_code', '')
     ana_instruction = data.get('ana_instruction', '')
+    topic = data.get('topic', '')
 
     result = generate_third_level_titles(title, title_code, ana_instruction)
     formatted_result = format_third_level_result_to_json(title, title_code, ana_instruction, result)
@@ -1223,13 +1243,13 @@ def edit_second_level_title():
             year = year_extract_from_title(combined_title)
 
             try:
-                query_result = query_relative_data_v2(year, combined_title,
-                                                      third_level_section.get("ana_instruction", ""))
-                reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+                query_result = query_relative_data_v3(year, combined_title,
+                                                      third_level_section.get("ana_instruction", ""),topic)
+                reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
             except Exception as e:
-                print(f"错误：调用 query_relative_data_v2 时发生异常: {e}")
+                print(f"错误：调用 query_relative_data_v3 时发生异常: {e}")
                 query_result = ([], [], [], [], "", [], {}, [], {}, {})
-                reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+                reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
 
             third_level_section["relative_data"] = {
                 "reference": {
@@ -1244,7 +1264,7 @@ def edit_second_level_title():
                     "indicators_sum": eco_indicators_sum,
                     "indicators_report": eco_indicators_report
                 },
-                "writing_instruction": instruction or "无具体分析思路"
+                "writing_instruction": writing_instruction or "无具体分析思路"
             }
     # try:
     #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1264,9 +1284,10 @@ def edit_second_level_title():
 @validate_json_request(['first_level_json'])
 @error_handler
 def edit_first_level_title():
+
     data = request.get_json()
     input_json = data.get('first_level_json', {})
-
+    topic = data.get('topic',"")
     title_code = input_json.get("title_code", "")
     title = input_json.get("title", "")
     ana_instruction = input_json.get("ana_instruction", "")
@@ -1297,7 +1318,6 @@ def edit_first_level_title():
             )
 
             print(f"formatted_third_level: {json.dumps(formatted_third_level, indent=4, ensure_ascii=False)}")
-
             # 处理formatted_third_level格式
             if isinstance(formatted_third_level, str):
                 try:
@@ -1305,7 +1325,6 @@ def edit_first_level_title():
                 except json.JSONDecodeError:
                     print(f"无法将formatted_third_level解析为JSON: {formatted_third_level}")
                     formatted_third_level = []
-
             if isinstance(formatted_third_level, dict):
                 if "subsections" in formatted_third_level:
                     formatted_third_level = formatted_third_level.get("subsections", [])
@@ -1315,27 +1334,25 @@ def edit_first_level_title():
             if not isinstance(formatted_third_level, list):
                 print(f"formatted_third_level不是列表类型: {type(formatted_third_level)}")
                 formatted_third_level = []
-
             # 处理每个三级标题
             for index, third_level_section in enumerate(formatted_third_level):
                 print(f"third_level_section: {third_level_section}")
-
-                instruction = third_level_section.get("ana_instruction", None)
+                original_instruction = third_level_section.get("ana_instruction", None)
+                print(f"Original instruction from third_level_section: {original_instruction}")
                 title_code = third_level_section.get("title_code", "")
                 third_title = third_level_section.get("title", "")
                 combined_title = formatted_result.get("title", "") + " - " + third_title
                 year = year_extract_from_title(combined_title)
-
                 try:
-                    query_result = query_relative_data_v2(year, combined_title, instruction)
-                    reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+                    query_result = query_relative_data_v3(year, combined_title, original_instruction, topic)
+                    reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
                 except Exception as e:
-                    print(f"错误：调用 query_relative_data_v2 时发生异常: {e}")
-                    reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = [], [], [], [], "", [], {}, [], {}, {}
+                    print(f"错误：调用 query_relative_data_v3 时发生异常: {e}")
+                    reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = [], [], [], [], "", [], {}, [], {}, {}
 
                 ic_trends_analysis = process_ic_trends(ic_trends)
-                instruction = instruction or "无具体分析思路"
-                print(f"current_instruction:{instruction}")
+                writing_instruction = writing_instruction or "无具体分析思路"
+                print(f"Instruction returned from query_relative_data_v3: {writing_instruction}")
 
                 reference = {
                     "report_source": reports if isinstance(reports, list) else [],
@@ -1353,7 +1370,7 @@ def edit_first_level_title():
                 # 添加相关数据到三级标题
                 third_level_section["relative_data"] = {
                     "reference": reference,
-                    "writing_instruction": instruction
+                    "writing_instruction": writing_instruction
                 }
                 formatted_third_level[index]["relative_data"] = third_level_section["relative_data"]
 
@@ -1392,5 +1409,25 @@ def edit_first_level_title():
 # if __name__ == '__main__':
 #     app.run(host='0.0.0.0', port=5009, debug=False)  # 将端口改为5001以避免与AirPlay冲突
 if __name__ == '__main__':
-    print(app.url_map)  # 打印所有路由
+    # 配置日志系统
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('app.log', encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+    
+    # 设置httpx日志级别为WARNING，避免打印过多请求日志
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    
+    # 解决控制台输出编码问题
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    
+    # 打印所有路由
+    print(app.url_map)
+    
+    # 运行应用
     app.run(host='0.0.0.0', port=5009, debug=False)

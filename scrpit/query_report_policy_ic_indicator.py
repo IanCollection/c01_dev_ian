@@ -459,6 +459,7 @@ def query_relative_data_v2(year, current_title, analysis_response=None):
 #添加topic
 def query_relative_data_v3(year, current_title, analysis_response=None,topic = None):
     # 在函数开头初始化所有返回值变量，确保它们有正确的空类型
+    print(f"正在调用query_relative_data_v3,当前处理的主题是: {topic}")
     report_query_response = []
     simplified_policies = []
     industry_analysis = {"overall_analysis": "暂无行业分析数据"}  # 保持 dict 类型
@@ -469,20 +470,29 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
     eco_indicators_report = ""  # 期望是 str，初始化为空字符串
     analysis_results_ictrend_v2 = {}  # 期望是 dict，初始化为空字典
     filtered_result_ic_current_rating = []
-
+    print(f"当前大标题：{topic}")
     try:
-        print(current_title)
         # #     # # # 生成分析方法
-        if analysis_response is None or len(analysis_response)==0:
-            # print('当前分析思路为空，开始生成分析思路')
+        if not analysis_response or len(analysis_response)==0:
+    # print('当前分析思路为空，开始生成分析思路')
             _analysis_response_str, cost = generate_analysis_methods(current_title) # Use temp var
-            analysis_dict = json.loads(_analysis_response_str)
-            analysis_response = analysis_dict['analysis'] # analysis_response is str
+            print(f'Raw response from generate_analysis_methods: {_analysis_response_str}') # <-- 添加打印
+            try: # <-- 添加 try-except 处理可能的 JSON 解析错误
+                analysis_dict = json.loads(_analysis_response_str)
+                generated_analysis = analysis_dict.get('analysis', '') # <-- 使用 .get() 更安全
+                print(f'Parsed analysis from generate_analysis_methods: {generated_analysis}') # <-- 添加打印
+                w_instruction = generated_analysis # Use the newly generated analysis
+            except json.JSONDecodeError as json_err:
+                print(f"Error decoding JSON from generate_analysis_methods: {json_err}")
+                print(f"Received string: {_analysis_response_str}")
+                w_instruction = "" # 或者设置为默认值
+        else:
+            w_instruction = analysis_response
         # else: # analysis_response is already a string passed in
             # analysis_dict remains the string analysis_response for query_text
         # print(analysis_dict)
         # query_text = f"{current_title}\n 分析思路：{analysis_dict['analysis']}" # Old logic assumes dict
-        query_text = f"{current_title}\n 分析思路：{analysis_response}" # Use str analysis_response directly
+        query_text = f"{current_title}\n - {w_instruction} - {topic}" # Use str analysis_response directly
 
         potential_ic_trend_labels = get_potential_ic_trend_labels(query_text)
         # top_k = 10
@@ -508,9 +518,11 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
             item['file_node_name'] = file_node_name
             # 将有效元素添加到过滤后的列表中
             filtered_response.append(item)
-
+        # print(f"filtered_response的长度为{len(filtered_response)}")
+        # print(f"filtered_response:{filtered_response}")
         # 使用线程池并行处理每个content的相关性判断
-        final_response_reports = [] # Use new var for final result
+
+        final_response_reports = []  # 使用新变量存储最终结果
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # 提交所有判断任务，仅处理有content的元素
             future_to_item = {
@@ -518,39 +530,77 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                 for item in filtered_response if item.get('content')
             }
 
+            # 在提交任务时打印current_title
+            print(f"正在并行处理current_title: {current_title}")
+
             # 过滤保留相关的内容
             for future in concurrent.futures.as_completed(future_to_item):
                 item = future_to_item[future]
                 try:
                     if future.result():  # 如果返回True则保留
-                        final_response_reports.append(item) # Append to new var
+                        final_response_reports.append(item)
                 except Exception as e:
                     print(f"判断标题相关性时出错: {e}")
+                    # 可以考虑记录日志或进行其他错误处理
 
-            # 更新report_query_response为最终过滤后的结果
-            report_query_response = final_response_reports # Assign final result
+        # 更新report_query_response为第一次过滤后的结果
+        report_query_response = final_response_reports
+        print(f"第一次过滤后的report_query_response的长度为{len(report_query_response)}")
+        print(f"第一次过滤后的report_query_response:{report_query_response}")
 
-        # 并行处理判断每个report_query_response的content与current_title的相关性
-        final_reports = [] # 使用新变量存储最终结果
+        # 并行处理判断每个report_query_response的content与topic的相关性
+
+
+        final_reports = []  # 使用新变量存储最终结果
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # 提交所有判断任务，仅处理有content的元素
             future_to_report = {
-                executor.submit(judge_topic_relevance, topic, report['content']): report
-                for report in report_query_response if report.get('content')
+                executor.submit(judge_topic_relevance, topic, report['file_node_name']): report
+                for report in report_query_response if report.get('file_node_name')
             }
+
+            # 在提交任务时打印topic和file_node_name
+            print(f"正在并行处理topic: {topic}")
+            for report in report_query_response:
+                if report.get('file_node_name'):
+                    print(f"处理报告: {report['file_node_name']}")
 
             # 过滤保留相关的内容
             for future in concurrent.futures.as_completed(future_to_report):
                 report = future_to_report[future]
                 try:
                     if future.result():  # 如果返回True则保留
-                        final_reports.append(report) # 添加到新变量
+                        final_reports.append(report)
                 except Exception as e:
                     print(f"判断报告主题相关性时出错: {e}")
+                    # 可以考虑记录日志或进行其他错误处理
 
-            # 更新report_query_response为最终过滤后的结果
-            report_query_response = final_reports # 赋值最终结果
+        # 更新report_query_response为最终过滤后的结果
+        report_query_response = final_reports
+        print(f"第二次过滤后的report_query_response的长度为{len(report_query_response)}")
+        print(f"第二次过滤后的report_query_response:{report_query_response}")
 
+
+        # final_reports_v2 = [] # 使用新变量存储最终结果
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     # 提交所有判断任务，仅处理有content的元素
+        #     future_to_report = {
+        #         executor.submit(judge_topic_relevance, topic, report['file_node_name']): report
+        #         for report in report_query_response if report.get('file_node_name')
+        #     }
+        #
+        #     # 过滤保留相关的内容
+        #     for future in concurrent.futures.as_completed(future_to_report):
+        #         report = future_to_report[future]
+        #         try:
+        #             if future.result():  # 如果返回True则保留
+        #                 final_reports_v2.append(report) # 添加到新变量
+        #         except Exception as e:
+        #             print(f"判断报告主题相关性时出错: {e}")
+        #
+        #     # 更新report_query_response为最终过滤后的结果
+        #     report_query_response = final_reports_v2 # 赋值最终结果
+        #
 
         # print(report_query_response)
         # print(len(report_query_response))
@@ -594,6 +644,8 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
             simplified_policies_raw.append(simplified_policy) # Append to temp var
         # print(f"简化后的政策数量为{len(simplified_policies_raw)}")
         # 并行处理判断每个simplified_policies_raw的policy_title与current_title的相关性
+        # print(f"simplified_policies_raw的长度为{len(simplified_policies_raw)}")
+        # print(f"simplified_policies_raw:{simplified_policies_raw}")
         final_policies = [] # Use new var for final result
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # 提交所有判断任务，仅处理有policy_title的元素
@@ -602,7 +654,6 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                 if policy.get('policy_title'):
                     future = executor.submit(judge_title_relevance, current_title, policy.get('policy_title'))
                     futures.append((policy, future))
-
             # 等待所有任务完成并处理结果
             for policy, future in futures:
                 try:
@@ -612,8 +663,33 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                     print(f"判断政策标题相关性时出错: {e}")
 
             # 更新simplified_policies为最终过滤后的结果
-            simplified_policies = final_policies # Assign final result
+        simplified_policies = final_policies # Assign final result
         # print(f"筛选后的政策数量为{len(simplified_policies)}")
+        # print(f"筛选后的政策数量为{len(simplified_policies)}")
+        # print(f"筛选后的政策:{simplified_policies}")
+
+        final_policies_v2 = []
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # 提交所有判断任务，仅处理有policy_title的元素
+            futures = []
+            for policy in simplified_policies: # Use temp var
+                if policy.get('policy_summary'):
+                    print(f"政策摘要: {policy.get('policy_summary')}")  # 打印每个政策摘要
+                    future = executor.submit(judge_topic_relevance, topic, policy.get('policy_summary'))
+                    futures.append((policy, future))
+            # 等待所有任务完成并处理结果
+            for policy, future in futures:
+                try:
+                    if future.result():  # 如果返回True则保留
+                        final_policies_v2.append(policy) # Append to new var
+                except Exception as e:
+                    print(f"判断政策标题相关性时出错: {e}")
+
+            # 更新simplified_policies为最终过滤后的结果
+            simplified_policies = final_policies_v2 # Assign final result
+        print(f"筛选后的政策数量为_v2{len(simplified_policies)}")
+        print(f"筛选后的政策_v2:{simplified_policies}")
+
 
         # 遍历simplified_policies，收集所有industry字段
         for policy in simplified_policies: # Use final policies list
@@ -749,14 +825,14 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
         # 用year来修改eco_indicators_sum (This comment seems outdated/misplaced)
 
         # 确保 analysis_response 变量存在且是字符串 (it should be handled at the start of try)
-        if 'analysis_response' not in locals() or not isinstance(analysis_response, str):
-             analysis_response = "{\"analysis\": \"分析方法处理出错\"}" # Fallback str
+        if 'analysis_response' not in locals() or not isinstance(w_instruction, str):
+             w_instruction = "{\"analysis\": \"分析方法处理出错\"}" # Fallback str
 
         # 返回所有变量，它们现在应该具有正确的类型
-        return report_query_response, simplified_policies, industry_analysis, cat_indicators, analysis_response, eco_indicators, eco_indicators_sum,eco_indicators_report,analysis_results_ictrend_v2,filtered_result_ic_current_rating
+        return report_query_response, simplified_policies, industry_analysis, cat_indicators, w_instruction, eco_indicators, eco_indicators_sum,eco_indicators_report,analysis_results_ictrend_v2,filtered_result_ic_current_rating
 
     except Exception as e:
-        print(f"query_relative_data_v2 函数执行出错: {str(e)}")
+        print(f"query_relative_data_v3 函数执行出错: {str(e)}")
         # 在函数顶层捕获到未知错误时，返回在函数开头初始化的、具有正确类型的变量
         # 确保 analysis_response 也是字符串类型
         _analysis_response_final = "{\"analysis\": \"无法生成分析方法\"}" # Default error string
@@ -764,38 +840,41 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
              _analysis_response_final = analysis_response # Use generated one if available
 
         # 返回初始化的变量，确保类型正确
-        return report_query_response, simplified_policies, industry_analysis, cat_indicators, _analysis_response_final, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating
+        return report_query_response, simplified_policies, industry_analysis, cat_indicators, w_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating
 
 if __name__ == "__main__":
+    # year = 2024
+    # query_title = '2024年新能源汽车行业'
+    # instruction = ''
     year = 2024
-    query_title = '2024年新能源汽车行业'
-    instruction = '请着重分析上下游产业'
+    query_title = "人形机器人"
+    instruction = ''
     # 调用函数并解包所有返回值
     (report_query_response, simplified_policies, industry_analysis,
      cat_indicators, analysis_response, eco_indicators, eco_indicators_sum,
      eco_indicators_report, analysis_results_ictrend_v2,
-     filtered_result_ic_current_rating) = query_relative_data_v2(
-        2023, "2023年新能源汽车", instruction)
+     filtered_result_ic_current_rating) = query_relative_data_v3(
+        2023, "龙头企业：市场份额与全产业链数字化优势", instruction,query_title)
 
-    print("="*50)
-    print(f"report_query_response (type: {type(report_query_response)}):", report_query_response)
+    # print("="*50)
+    # print(f"report_query_response (type: {type(report_query_response)}):", report_query_response)
     print("="*50)
     print(f"simplified_policies (type: {type(simplified_policies)}):", simplified_policies)
     print("="*50)
-    print(f"industry_analysis (type: {type(industry_analysis)}):", industry_analysis)
-    print("="*50)
-    print(f"cat_indicators (type: {type(cat_indicators)}):", cat_indicators)
-    print("="*50)
-    print(f"analysis_response (type: {type(analysis_response)}):", analysis_response)
-    print("="*50)
-    print(f"eco_indicators (type: {type(eco_indicators)}):", eco_indicators)
-    print("="*50)
-    print(f"eco_indicators_sum (type: {type(eco_indicators_sum)}):", eco_indicators_sum)
-    print("="*50)
-    print(f"eco_indicators_report (type: {type(eco_indicators_report)}):", eco_indicators_report)
-    print("="*50)
-    print(f"analysis_results_ictrend_v2 (type: {type(analysis_results_ictrend_v2)}):", analysis_results_ictrend_v2)
-    print("="*50)
-    print(f"filtered_result_ic_current_rating (type: {type(filtered_result_ic_current_rating)}):", filtered_result_ic_current_rating)
-    print("="*50)
-    
+    # print(f"industry_analysis (type: {type(industry_analysis)}):", industry_analysis)
+    # print("="*50)
+    # print(f"cat_indicators (type: {type(cat_indicators)}):", cat_indicators)
+    # print("="*50)
+    # print(f"analysis_response (type: {type(analysis_response)}):", analysis_response)
+    # print("="*50)
+    # print(f"eco_indicators (type: {type(eco_indicators)}):", eco_indicators)
+    # print("="*50)
+    # print(f"eco_indicators_sum (type: {type(eco_indicators_sum)}):", eco_indicators_sum)
+    # print("="*50)
+    # print(f"eco_indicators_report (type: {type(eco_indicators_report)}):", eco_indicators_report)
+    # print("="*50)
+    # print(f"analysis_results_ictrend_v2 (type: {type(analysis_results_ictrend_v2)}):", analysis_results_ictrend_v2)
+    # print("="*50)
+    # print(f"filtered_result_ic_current_rating (type: {type(filtered_result_ic_current_rating)}):", filtered_result_ic_current_rating)
+    # print("="*50)
+    #

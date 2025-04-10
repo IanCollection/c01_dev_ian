@@ -12,10 +12,12 @@ import time
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
 from utils.vector_generator import get_embedding_single_text
-from database.neo4j_query import query_file_node, query_header_node, query_content_node,query_file_batch_nodes,query_header_batch_nodes,query_content_batch_nodes
+from database.neo4j_query import query_file_node, query_header_node, query_content_node, query_file_batch_nodes, \
+    query_header_batch_nodes, query_content_batch_nodes
 
 # 加载环境变量
 load_dotenv()
+
 
 # 连接Neo4j数据库
 def get_neo4j_driver():
@@ -24,19 +26,20 @@ def get_neo4j_driver():
     password = os.getenv("NEO4J_PASSWORD", "password")
     return GraphDatabase.driver(uri, auth=(username, password))
 
+
 # 加载FAISS索引
 def load_faiss_index(index_type):
     """
     加载指定类型的FAISS索引
-    
+
     Args:
         index_type (str): 索引类型，可选值为 'filename', 'header', 'content'
-    
+
     Returns:
         tuple: (faiss索引, id列表)
     """
     base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "faiss_index_sc")
-    
+
     if index_type == 'filename':
         index_path = os.path.join(base_path, "filename_index_flat.index")
         ids_path = os.path.join(base_path, "filename_index_flat_ids.json")
@@ -45,17 +48,17 @@ def load_faiss_index(index_type):
         ids_path = os.path.join(base_path, f"{index_type}_ids.npy")
     else:
         raise ValueError(f"不支持的索引类型: {index_type}")
-    
+
     # 检查文件是否存在
     if not os.path.exists(index_path):
         raise FileNotFoundError(f"索引文件不存在: {index_path}")
-    
+
     if not os.path.exists(ids_path):
         raise FileNotFoundError(f"ID文件不存在: {ids_path}")
-    
+
     # 加载索引
     index = faiss.read_index(index_path)
-    
+
     # 尝试使用GPU
     if faiss.get_num_gpus() > 0 and index_type != 'filename':
         try:
@@ -67,36 +70,38 @@ def load_faiss_index(index_type):
             print(f"GPU加载失败，使用CPU模式: {e}")
     else:
         print("未检测到GPU或为filename索引，使用CPU模式")
-    
+
     # 加载ID列表
     if index_type == 'filename':
         with open(ids_path, 'r', encoding='utf-8') as f:
             ids = json.load(f)
     else:
         ids = np.load(ids_path)
-    
+
     return index, ids
+
 
 # 检索函数
 def search_faiss(query, index_type, top_k=10):
     """
     在FAISS索引中搜索最相似的文档，优先使用GPU加速并记录检索时间
-    
+
     Args:
         query (str): 查询文本
         index_type (str): 索引类型，可选值为 'filename', 'header', 'content'
         top_k (int): 返回的结果数量
-        
+
     Returns:
         tuple: (检索结果ID数组, 检索时间信息)
     """
     try:
         # 记录总开始时间
         start_time = time.time()
-        
+
         # 加载索引
-        base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "faiss_index_sc")
-        
+        base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database",
+                                 "faiss_index_sc")
+
         if index_type == 'filename':
             index_path = os.path.join(base_path, "filename_index_flat.index")
             ids_path = os.path.join(base_path, "filename_index_flat_ids.json")
@@ -105,35 +110,35 @@ def search_faiss(query, index_type, top_k=10):
             ids_path = os.path.join(base_path, f"{index_type}_ids.npy")
         else:
             raise ValueError(f"不支持的索引类型: {index_type}")
-        
+
         # 检查文件是否存在
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"索引文件不存在: {index_path}")
-        
+
         if not os.path.exists(ids_path):
             raise FileNotFoundError(f"ID文件不存在: {ids_path}")
-        
+
         # 记录索引加载开始时间
         load_start_time = time.time()
-        
+
         # 加载索引
         index = faiss.read_index(index_path)
-        
+
         # 记录索引加载时间
         load_time = time.time() - load_start_time
         print(f"索引加载耗时: {load_time:.4f}秒")
-        
+
         # 加载元数据以获取最优nprobe值
         meta_file = os.path.join(base_path, f"{index_type}_meta.json")
         if os.path.exists(meta_file) and hasattr(index, 'nprobe'):
             try:
                 with open(meta_file, 'r') as f:
                     meta_data = json.load(f)
-                    
+
                 # 获取nlist和向量总数
                 nlist = meta_data.get('parameters', {}).get('nlist', 100)
                 total_vectors = meta_data.get('total_vectors', 1000)
-                
+
                 # 设置最优nprobe值
                 if hasattr(index, 'nlist'):
                     optimal_nprobe = max(1, min(index.nlist, int(index.nlist * 0.1)))
@@ -146,21 +151,21 @@ def search_faiss(query, index_type, top_k=10):
                 # 默认设置
                 if hasattr(index, 'nprobe') and hasattr(index, 'nlist'):
                     index.nprobe = min(index.nlist, 16)
-        
+
         # 尝试使用GPU加速
         use_gpu = False
         gpu_transfer_time = 0
         gpu_id = None
-        
+
         if faiss.get_num_gpus() > 0 and index_type != 'filename':
             try:
                 print("检测到GPU，尝试使用GPU加速检索...")
                 gpu_start_time = time.time()
-                
+
                 # 获取可用GPU
                 n_gpus = faiss.get_num_gpus()
                 gpu_id = 0  # 默认使用第一个GPU
-                
+
                 # 尝试获取GPU内存信息选择最佳GPU
                 try:
                     import torch
@@ -169,60 +174,60 @@ def search_faiss(query, index_type, top_k=10):
                         for i in range(n_gpus):
                             free_mem = torch.cuda.get_device_properties(i).total_memory - torch.cuda.memory_allocated(i)
                             gpu_mem_free.append((i, free_mem))
-                        
+
                         # 选择内存最大的GPU
                         gpu_id, _ = max(gpu_mem_free, key=lambda x: x[1])
                         print(f"选择GPU {gpu_id} 作为最佳设备")
                 except Exception as e:
                     print(f"获取GPU详细信息失败: {e}，使用默认GPU 0")
-                
+
                 # 创建GPU资源
                 res = faiss.StandardGpuResources()
-                
+
                 # 创建GPU配置选项
                 gpu_options = faiss.GpuClonerOptions()
                 gpu_options.useFloat16 = True  # 使用半精度以节省GPU内存
-                
+
                 # 将索引移至GPU
                 index = faiss.index_cpu_to_gpu(res, gpu_id, index, gpu_options)
                 use_gpu = True
-                
+
                 gpu_transfer_time = time.time() - gpu_start_time
                 print(f"成功将索引转移到GPU {gpu_id}，耗时: {gpu_transfer_time:.4f}秒")
             except Exception as e:
                 print(f"GPU加速初始化失败: {str(e)}，使用CPU模式")
         else:
             print("未检测到GPU或为filename索引，使用CPU模式")
-        
+
         # 记录向量生成开始时间
         vector_start_time = time.time()
-        
+
         # 将查询文本转换为向量
         query_vector = get_embedding_single_text(query)
         query_vector = np.array(query_vector, dtype=np.float32)
-        
+
         # 记录向量生成时间
         vector_time = time.time() - vector_start_time
         print(f"查询向量生成耗时: {vector_time:.4f}秒")
-        
+
         # 如果是一维的 (512,) 则重塑为 (1, 512)
         if len(query_vector.shape) == 1:
             query_vector = query_vector.reshape(1, -1)
-        
+
         # 记录搜索开始时间
         search_start_time = time.time()
-        
+
         # 执行搜索
         distances, indices = index.search(query_vector, top_k)
-        
+
         # 记录搜索时间
         search_time = time.time() - search_start_time
         print(f"实际搜索耗时: {search_time:.4f}秒")
-        
+
         # 记录总检索时间
         total_time = time.time() - start_time
         print(f"检索完成，使用{'GPU' if use_gpu else 'CPU'}，总耗时: {total_time:.4f}秒")
-        
+
         # 记录检索信息到日志
         log_search_metrics(
             query=query,
@@ -237,7 +242,7 @@ def search_faiss(query, index_type, top_k=10):
             gpu_transfer_time=gpu_transfer_time,
             result_count=len(indices[0])
         )
-        
+
         # 清理GPU内存
         if use_gpu:
             try:
@@ -247,7 +252,7 @@ def search_faiss(query, index_type, top_k=10):
                     print("已清理GPU缓存")
             except Exception as e:
                 print(f"清理GPU缓存失败: {str(e)}")
-        
+
         # 返回检索结果和时间信息
         time_info = {
             'total_time': total_time,
@@ -258,7 +263,7 @@ def search_faiss(query, index_type, top_k=10):
             'use_gpu': use_gpu,
             'gpu_id': gpu_id
         }
-        
+
         return indices[0], time_info
 
     except Exception as e:
@@ -268,11 +273,12 @@ def search_faiss(query, index_type, top_k=10):
         end_time = time.time()
         return np.array([], dtype=np.int64), {'total_time': end_time - start_time, 'error': str(e)}
 
-def log_search_metrics(query, index_type, top_k, use_gpu, gpu_id, total_time, 
-                      load_time, vector_time, search_time, gpu_transfer_time, result_count):
+
+def log_search_metrics(query, index_type, top_k, use_gpu, gpu_id, total_time,
+                       load_time, vector_time, search_time, gpu_transfer_time, result_count):
     """
     记录检索指标到日志文件
-    
+
     Args:
         query (str): 查询文本
         index_type (str): 索引类型
@@ -290,10 +296,10 @@ def log_search_metrics(query, index_type, top_k, use_gpu, gpu_id, total_time,
         # 确保日志目录存在
         log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
         os.makedirs(log_dir, exist_ok=True)
-        
+
         # 日志文件路径
         log_file = os.path.join(log_dir, "faiss_search_metrics.log")
-        
+
         # 创建日志条目
         log_entry = {
             'query': query,
@@ -309,31 +315,32 @@ def log_search_metrics(query, index_type, top_k, use_gpu, gpu_id, total_time,
             'result_count': result_count,
             'query_length': len(query)
         }
-        
+
         # 追加到日志文件
         with open(log_file, 'a', encoding='utf-8') as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
-            
+
     except Exception as e:
         print(f"记录检索指标失败: {str(e)}")
+
 
 # 从Neo4j获取检索结果的详细信息
 def get_details_from_neo4j(result_ids, index_type):
     """
     从Neo4j数据库获取检索结果的详细信息
-    
+
     Args:
         result_ids (list): 检索结果ID列表
         index_type (str): 索引类型，可选值为 'filename', 'header', 'content'
-    
+
     Returns:
         list: 包含详细信息的字典列表
     """
     if not result_ids:
         return []
-        
+
     driver = get_neo4j_driver()
-    
+
     try:
         with driver.session() as session:
             if index_type == 'filename':
@@ -356,7 +363,7 @@ def get_details_from_neo4j(result_ids, index_type):
                 RETURN c.id AS id, c.content AS content, c.page_idx AS page_idx,
                        f.id AS file_id, f.title AS file_title
                 """
-            
+
             result = session.run(query, ids=result_ids)
             return [dict(record) for record in result]
     except Exception as e:
@@ -365,17 +372,18 @@ def get_details_from_neo4j(result_ids, index_type):
     finally:
         driver.close()
 
+
 # 综合检索函数
 def search_and_query(query, index_type='content', top_k=10, with_details=True):
     """
     综合检索函数，支持检索文件名、标题和内容
-    
+
     Args:
         query (str): 查询文本
         index_type (str): 索引类型，可选值为 'filename', 'header', 'content'
         top_k (int): 返回的结果数量
         with_details (bool): 是否返回详细信息
-    
+
     Returns:
         list: 检索结果列表
     """
@@ -422,16 +430,17 @@ def search_and_query(query, index_type='content', top_k=10, with_details=True):
     #
     return details
 
+
 def search(query, index_type='content', top_k=5):
     """
     综合检索函数，支持检索文件名、标题和内容
-    
+
     Args:
         query (str): 查询文本
         index_type (str): 索引类型，可选值为 'filename', 'header', 'content'
         top_k (int): 返回的结果数量
 
-    
+
     Returns:
         list: 检索结果列表
     """
@@ -442,6 +451,7 @@ def search(query, index_type='content', top_k=5):
     # 对faiss_results_ids进行去重
     faiss_results_ids = list(set(faiss_results_ids))
     return faiss_results_ids
+
 
 # 示例用法
 if __name__ == "__main__":

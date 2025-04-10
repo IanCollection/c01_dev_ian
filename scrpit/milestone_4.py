@@ -20,7 +20,7 @@ from scrpit.overview_report import build_overview_with_report, generate_comprehe
     generate_comprehensive_toc_v2_stream
 from scrpit.overview_title import generate_comprehensive_toc_with_focus_points
 from Agent.Overview_agent import overview_conclusion, tuning_third_heading, year_extract_from_title
-from scrpit.query_report_policy_ic_indicator import query_relative_data, query_relative_data_v2
+from scrpit.query_report_policy_ic_indicator import query_relative_data, query_relative_data_v2, query_relative_data_v3
 
 
 # 自定义JSON编码器
@@ -33,8 +33,9 @@ class DateTimeEncoder(json.JSONEncoder):
         return super().default(obj)
 
 # 一级标题处理函数
-def process_first_level_title(first_level_section, index):
+def process_first_level_title(first_level_section, index, topic = None):
     start_time = time.time()
+    print(f"正在调用process_first_level_title,当前处理的主题是: {topic}")
     first_level_title = first_level_section["title"]
     print(f"开始处理第 {index + 1} 个一级标题: {first_level_title}")
 
@@ -45,7 +46,7 @@ def process_first_level_title(first_level_section, index):
 
     # 使用线程池处理二级标题
     with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(process_second_level_title, first_level_title, sec) 
+        futures = [executor.submit(process_second_level_title, first_level_title, sec, topic)
                   for sec in first_level_section["subsections"]]
         
         for future in as_completed(futures):
@@ -59,7 +60,8 @@ def process_first_level_title(first_level_section, index):
     return index, new_first_level
 
 # 二级标题处理函数
-def process_second_level_title(first_level_title, second_level_section):
+def process_second_level_title(first_level_title, second_level_section,topic = None):
+    print(f"正在调用process_second_level_title,当前处理的主题是: {topic}")
     new_second_level = {
         "title": second_level_section["title"],
         "subsections": []
@@ -68,11 +70,11 @@ def process_second_level_title(first_level_title, second_level_section):
     if not second_level_section.get("subsections"):
         print(f"警告：{first_level_title} - {second_level_section['title']} 没有三级标题，将创建默认节点")
         new_second_level["subsections"].append(
-            process_third_level_title(first_level_title, second_level_section["title"], {"title": "默认内容"})
+            process_third_level_title(first_level_title, second_level_section["title"], {"title": "默认内容"}, instruction=None, topic=topic)
         )
     else:
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_third_level_title, first_level_title, second_level_section["title"], sec)
+            futures = [executor.submit(process_third_level_title, first_level_title, second_level_section["title"], sec, None, topic)
                       for sec in second_level_section["subsections"]]
             
             for future in as_completed(futures):
@@ -85,7 +87,7 @@ def process_second_level_title(first_level_title, second_level_section):
     return new_second_level
 
 
-def process_second_level_title_for_edit(first_level_title, second_level_section):
+def process_second_level_title_for_edit(first_level_title, second_level_section, topic = None):
     new_second_level = {
         "title": second_level_section["title"],
         "subsections": [],
@@ -94,11 +96,11 @@ def process_second_level_title_for_edit(first_level_title, second_level_section)
     if not second_level_section.get("subsections"):
         print(f"警告：{first_level_title} - {second_level_section['title']} 没有三级标题，将创建默认节点")
         new_second_level["subsections"].append(
-            process_third_level_title(first_level_title, second_level_section["title"], {"title": "默认内容"})
+            process_third_level_title(first_level_title, second_level_section["title"], {"title": "默认内容"}, None, topic)
         )
     else:
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_third_level_title, first_level_title, second_level_section["title"], sec)
+            futures = [executor.submit(process_third_level_title, first_level_title, second_level_section["title"], sec, None, topic)
                        for sec in second_level_section["subsections"]]
 
             for future in as_completed(futures):
@@ -111,8 +113,10 @@ def process_second_level_title_for_edit(first_level_title, second_level_section)
     return new_second_level
 
 # 三级标题处理函数
-def process_third_level_title(first_level_title, second_level_title, third_level_section,instruction = None):
+def process_third_level_title(first_level_title, second_level_title, third_level_section,instruction = None,topic = None):
     try:
+        # 修改日志标签以便区分
+        print(f"[process_third_level_title ENTRY] Received topic: {topic}") 
         if not isinstance(third_level_section, dict) or 'title' not in third_level_section:
             print(f"无效的三级标题数据格式: {third_level_section}")
             return create_default_third_level()
@@ -121,7 +125,12 @@ def process_third_level_title(first_level_title, second_level_title, third_level
         # year = 2023
         year = year_extract_from_title(combined_title)
         try:
-            reports, policy, ic_trends, ic_current, instruction, eco_indicators,eco_indicators_sum,eco_indicators_report, analysis_results_ictrend_v2,filtered_result_ic_current_rating= query_relative_data_v2(year, combined_title,instruction)
+            # reports, policy, ic_trends, ic_current, instruction, eco_indicators,eco_indicators_sum,eco_indicators_report, analysis_results_ictrend_v2,filtered_result_ic_current_rating= query_relative_data_v2(year, combined_title,instruction)
+            
+            # 添加调用前日志
+            print(f"[process_third_level_title PRE-CALL] Calling query_relative_data_v3 with topic: {topic}, instruction: {instruction}") 
+            reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators,eco_indicators_sum,eco_indicators_report, analysis_results_ictrend_v2,filtered_result_ic_current_rating= query_relative_data_v3(year, combined_title,instruction,topic)
+            print(f"writing_instruction: {writing_instruction}")
 
         except Exception as query_error:
             print(f"查询数据时出错 {combined_title}: {str(query_error)}")
@@ -130,7 +139,7 @@ def process_third_level_title(first_level_title, second_level_title, third_level
         # 处理数据
         ic_trends_analysis = process_ic_trends(ic_trends)
         # ic_current = ic_current if isinstance(ic_current, str) else "无相关数据"
-        instruction = instruction or "无具体写作指导"
+        instruction = writing_instruction or "无具体写作指导"
 
         reference = {
             "report_source": reports if isinstance(reports, list) else [],
@@ -156,7 +165,7 @@ def process_third_level_title(first_level_title, second_level_title, third_level
         }
 
         try:
-            current_new_title, _, _ = tuning_third_heading(tuning_reference, instruction, third_level_section['title'])
+            current_new_title, _, _ = tuning_third_heading(tuning_reference, instruction, third_level_section['title'],topic)
             current_new_title_code, current_new_pure_title = code_title_spliter(current_new_title)
 
         except Exception as tuning_error:
@@ -248,11 +257,11 @@ if __name__ == "__main__":
 
     for i, section in enumerate(section_list):
         try:
-            index, processed_first_level = process_first_level_title(section, i)
+            index, processed_first_level = process_first_level_title(section, i, input_title)
             # print(processed_first_level)
             # print('开始对当前的一级和二级标题进行调整。')
 
-            modified_content_second_headings = modify_second_level_headers_stream(processed_first_level)
+            modified_content_second_headings = modify_second_level_headers_stream(processed_first_level, input_title)
             # print(modified_content_second_headings)
             modified_content = modify_first_level_headers_stream(
                 modified_content_second_headings

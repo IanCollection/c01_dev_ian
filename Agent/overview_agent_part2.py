@@ -96,12 +96,10 @@ def generate_second_level_titles(second_level_title: str, title_code: str, analy
 def generate_third_level_titles(second_level_title: str, title_code: str, analysis_instruction: str) -> Dict:
     """
     基于二级标题、标题代码和分析思路生成三级标题
-
     参数:
         second_level_title (str): 二级标题文本
         title_code (str): 二级标题代码 (如 "5.1")
         analysis_instruction (str): 二级标题的分析思路
-
     返回:
         Dict: 包含生成的三级标题及其代码的JSON结构
     """
