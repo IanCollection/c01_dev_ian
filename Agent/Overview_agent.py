@@ -837,20 +837,39 @@ def generate_final_toc_v2_stream_no_title(all_reports_with_summaries: List[Dict]
 
         # 优化：使用更简洁明确的提示词，并加入title指导
         final_prompt = """
-                以下输入是与"{title}"主题相关的各个研报的目录整理而成的目录框架，请你基于相关研报的目录框架并围绕"{title}"主题，生成一个于主题有关的综合目录：
+                你是一个专业的研报分析师，请基于以下与"{title}"主题相关的研报目录框架，生成一个结构完整、逻辑清晰、主题聚焦的综合目录：
+
+                输入数据：
                 {summaries}
-                要求:
-                1. 必须使用markdown格式（# 标题，## 一级子标题，### 二级子标题 #### 三级子标题),但是跳过生成# 标题，直接生成所有下属三级子目录,
-                2. 注意不要遗漏markdown格式里的'#'符号
-                3. 合并相似标题，去除重复内容
-                4. 确保整个综合目录包含三级标题结构，并且目录的标题号必须是数字
-                5. 直接输出markdown格式，不要包含任何解释性文字、多余字符或markdown标识（如```）
-                6. 目录结构要紧密围绕"{title}"的核心主题展开
-                7. 确保每个章节都服务于标题所表达的{core_keywords}
-                8. 如果相关研报的某些标题或内容与目标主题无关，请直接过滤
-                9. 注意：相关研报的目录总结的参考权重与其索引位置相关，索引越小的目录总结参考权重越高
-                10. 优先考虑前5个目录总结的核心框架和结构
-                11. 在整合相似主题时，优先采用索引靠前的摘要中的表述
+
+                任务要求：
+                1. 格式规范：
+                   - 严格使用Markdown格式（## 一级标题，### 二级标题，#### 三级标题）
+                   - 跳过主标题，直接从一级标题开始
+                   - 确保标题编号使用数字（如1.1, 1.2）
+                   - 输出纯Markdown内容，不包含任何解释或标识符
+                   - 必须保留#符号作为Markdown标题标识符
+                   - 确保每个标题都以#开头，后跟空格和标题内容
+
+                2. 内容整合：
+                   - 紧密围绕"{title}"主题和{core_keywords}展开
+                   - 合并相似主题，去除重复内容
+                   - 过滤与主题无关的内容
+                   - 保持三级标题的完整结构
+
+                3. 优先级处理：
+                   - 优先考虑最相关的参考数据
+                   - 在整合相似主题时，优先采用索引靠前的表述
+                   - 确保目录结构主要参考前5个总结的核心框架
+
+                4. 质量要求：
+                   - 确保每个章节都服务于核心主题
+                   - 保持标题间的逻辑连贯性
+                   - 突出行业现状和发展趋势分析
+                   - 确保内容简洁、重点突出
+                   - 严格遵循Markdown语法规范
+
+                请直接输出符合要求的Markdown格式目录，不要包含任何解释性文字。特别注意：必须保留#符号作为标题标识符，确保输出格式完全符合Markdown规范。
             """.format(title=title, summaries="\n\n".join(summaries_with_sources), core_keywords=core_keywords)
 
         use_model = 'qwen-turbo' if len(all_reports_with_summaries) > 5 else model
@@ -871,15 +890,6 @@ def generate_final_toc_v2_stream_no_title(all_reports_with_summaries: List[Dict]
             if chunk.choices[0].delta.content:
                 chunk_content = chunk.choices[0].delta.content
                 content += chunk_content
-
-                # 计算当前chunk的成本
-                # if use_model == 'qwen-max-latest':
-                #     chunk_cost = (len(chunk_content) / 1000) * 0.0096  # 仅计算输出成本
-                # else:
-                #     chunk_cost = (len(chunk_content) / 1000) * 0.0006
-                # total_cost += chunk_cost
-
-                # 返回当前chunk和累计成本
                 yield chunk_content
 
 
@@ -1293,16 +1303,15 @@ def generate_toc_from_focus_points_stream_no_title(title: str, focus_points: str
         yield {"final": "", "cost": 0.0}
 
 
-
 def overview_conclusion(overview1, overview2, title):
     """
     对两个研报进行总结生成一个有三级标题的研报
-    
+
     Args:
         overview1 (str): 第一个研报目录
         overview2 (str): 第二个研报目录
         title (str): 研报标题
-        
+
     Returns:
         str: 生成的研报内容
         float: API调用成本
@@ -1321,7 +1330,8 @@ def overview_conclusion(overview1, overview2, title):
         """
 
     prompt = f"""
-        我会给你两个研报目录，一个是基于研报标题找到的相关历史研报整理得到的综合目录，另一个是根据分析师认为的分析重点得到的研报目录。请对以下两份研报内容进行总结分析,根据目标研报标题，生成一份新的研报大纲:
+    	【分析目的】
+    	我会给你两个研报目录，研报目录1是根据分析师认为的分析重点得到的初始标准研报目录，研报目录2是基于研报标题找到的相关历史研报整理得到的综合目录。请整合标准研报目录（研报目录1）和历史研报生成的目录（研报目录2），确保生成完整的涵盖一、二、三级标题的新的综合目录。
 
         研报目录1:
         {overview1}
@@ -1331,40 +1341,145 @@ def overview_conclusion(overview1, overview2, title):
 
         研报标题: {title}
 
-        要求:
-        1. 对两份研报的内容进行整合,提取共同的分析要点。并且根据目标研报的标题和分析目的，合理地提取两份研报目录中独特的分析要点和目录标题。
-        2. 保持三级标题结构,目录结构要符合研报写作逻辑,客观分析行业的发展现状和未来发展趋势。行业研究主要是通过综合分析特定行业的发展态势，产出深刻洞察和观点。方法论涵盖从宏观的产业层到微观的产品层的分析，对企业战略、政策制定和金融决策等产生显著影响。
-        3. 确保标题间逻辑关联性
-        4. 使用Markdown格式
-        5. 总结要全面但简洁,突出重点
-        6. 研报大纲要符合研报写作逻辑，目录符合研报的结构
-        7. 每个目录的标题必须用数字，不要出现"第一部分"，"第一章"等。
-        请直接返回Markdown格式的研报大纲。不要有其他任何多余字符比如'''markdown'
+        【核心要求】
+	    1、根据研报标题和分析目的，对标准研报目录和历史研报目录进行合理的整合,互相补充分析要点，但是如果历史研报目录中的某些内容与研报标题、标准研报目录所属行业相关度极低，则不需要将对应的历史研报目录与标准目录整合；
+	    2、保持一、二、三级标题结构,目录结构要符合研报写作逻辑,客观分析行业的发展现状和未来发展趋势。行业研究主要是通过综合分析特定行业的发展态势，产出深刻洞察和观点。方法论涵盖从宏观的产业层到微观的产品层的分析，对企业战略、政策制定和金融决策等产生显著影响。
+	    3、研报目录大纲的所有标题需要全篇风格统一，我会提供几种语言风格模板,请根据标题在目录的位置（如一级标题、二级标题还是三级标题；位于开头还是结尾等）、综合目录的具体内容，选择合适的风格，确保综合研报目录整体的语言风格统一；
+	    4、避免新生成的综合研报目录前后重复；
+	    5、使用书面语和行业术语，避免口语化、网络化或过于随意的表达；
+	    6、同层级的标题往往结构相似（对仗或平行结构），便于读者理解各部分的关系；
+	    7、标题直接揭示该章节的核心内容或研究对象，让读者能快速了解报告结构和重点；
+	    8、确保标题间逻辑关联性。
+	    9、使用Markdown格式。
+	    10、每个目录的标题必须用数字，不要出现“第一部分”，“第一章“等。
+	    11、请直接返回Markdown格式的研报大纲。不要有其他任何多余字符比如```markdown```。
+	    【风格选择】
+	    1、稳健陈述型
+		特点：风格严谨、中性客观，强调“是什么、怎么做”，适合政策分析、技术结构、市场梳理等章节。
+		示例：
+		新能源车产业链结构全景与协同路径
+		动力电池技术持续演进，安全与效率并重
+		海外市场扩张步伐加快，政策落地成关键变量
+		2、结构归纳型
+		特点：侧重“结构—要素—路径”的系统呈现，适合对复杂问题进行分类和模块化分析。
+		示例：
+		新能源产业生态系统的四大支柱分析
+		市场参与主体画像与功能定位
+		产业链上下游联动机制及优化建议
+		3、路径导向型
+		特点：强调演进过程与实现路径，常用“演变—发展—优化—升级”等动词，适合技术、市场路径描述。
+		示例：
+		锂资源供需矛盾的缓解路径分析
+		消费者接受度提升的关键驱动路径
+		4、机制功能型
+		特点：突出某一机制或功能如何运作及其作用，常用于解释行业运作逻辑或政策执行效果。
+		示例：
+		双积分政策对整车厂产销布局的调节机制
+		投融资机制对产业扩张的杠杆作用
+		储能技术在电力系统灵活性中的支撑功能
+		5、趋势判断型（偏陈述）
+		特点：虽具前瞻性判断，但语言依旧保持陈述口吻，不带夸张或强烈主观情绪。
+		示例：
+		行业集中度提升趋势下的龙头优势巩固
+		成本下行与技术突破共同推动产能释放
+		海外市场或将成为下一轮增长核心
         """
-
 
     try:
         completion = qwen_client.chat.completions.create(
-            model="qwen-max-latest", 
+            model="qwen-max-latest",
             messages=[
                 {"role": "system", "content": "你是一个专业的研报分析师,擅长总结和整合研报内容。"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2
         )
-        
+
         overview = completion.choices[0].message.content
-      
+
         # 计算成本
         input_cost = (completion.usage.prompt_tokens / 1000) * 0.0024
         output_cost = (completion.usage.completion_tokens / 1000) * 0.0096
         cost = input_cost + output_cost
-        
+
         return overview, cost
-        
+
     except Exception as e:
         print(f"生成研报总结时出错: {e}")
         return "", 0.0
+
+
+# def overview_conclusion(overview1, overview2, title):
+#     """
+#     对两个研报进行总结生成一个有三级标题的研报
+#
+#     Args:
+#         overview1 (str): 第一个研报目录
+#         overview2 (str): 第二个研报目录
+#         title (str): 研报标题
+#
+#     Returns:
+#         str: 生成的研报内容
+#         float: API调用成本
+#     """
+#     """
+#         对两个研报进行总结生成一个有三级标题的研报
+#
+#         Args:
+#             overview1 (str): 第一个研报目录
+#             overview2 (str): 第二个研报目录
+#             title (str): 研报标题
+#
+#         Returns:
+#             str: 生成的研报内容
+#             float: API调用成本
+#         """
+#
+#     prompt = f"""
+#         我会给你两个研报目录，一个是基于研报标题找到的相关历史研报整理得到的综合目录，另一个是根据分析师认为的分析重点得到的研报目录。请对以下两份研报内容进行总结分析,根据目标研报标题，生成一份新的研报大纲:
+#
+#         研报目录1:
+#         {overview1}
+#
+#         研报目录2:
+#         {overview2}
+#
+#         研报标题: {title}
+#
+#         要求:
+#         1. 对两份研报的内容进行整合,提取共同的分析要点。并且根据目标研报的标题和分析目的，合理地提取两份研报目录中独特的分析要点和目录标题。
+#         2. 保持三级标题结构,目录结构要符合研报写作逻辑,客观分析行业的发展现状和未来发展趋势。行业研究主要是通过综合分析特定行业的发展态势，产出深刻洞察和观点。方法论涵盖从宏观的产业层到微观的产品层的分析，对企业战略、政策制定和金融决策等产生显著影响。
+#         3. 确保标题间逻辑关联性
+#         4. 使用Markdown格式
+#         5. 总结要全面但简洁,突出重点
+#         6. 研报大纲要符合研报写作逻辑，目录符合研报的结构
+#         7. 每个目录的标题必须用数字，不要出现"第一部分"，"第一章"等。
+#         请直接返回Markdown格式的研报大纲。不要有其他任何多余字符比如'''markdown'
+#         """
+#
+#
+#     try:
+#         completion = qwen_client.chat.completions.create(
+#             model="qwen-max-latest",
+#             messages=[
+#                 {"role": "system", "content": "你是一个专业的研报分析师,擅长总结和整合研报内容。"},
+#                 {"role": "user", "content": prompt}
+#             ],
+#             temperature=0.2
+#         )
+#
+#         overview = completion.choices[0].message.content
+#
+#         # 计算成本
+#         input_cost = (completion.usage.prompt_tokens / 1000) * 0.0024
+#         output_cost = (completion.usage.completion_tokens / 1000) * 0.0096
+#         cost = input_cost + output_cost
+#
+#         return overview, cost
+#
+#     except Exception as e:
+#         print(f"生成研报总结时出错: {e}")
+#         return "", 0.0
 def generate_analysis_methods(current_concat_heading):
     """
     根据当前标题生成分析思路
@@ -1614,68 +1729,85 @@ def generate_analysis_methods(current_concat_heading):
 #     }, 0.0
 def conclude_from_ic_trend_score(analysis_of_ic_trend):
     """
-    根据ic_trend_score指标数据总结行业景气度
+    根据ic_trend_score指标数据总结行业景气度，优化后的版本
 
     返回:
         dict: 包含各行业景气度判断及整体行业景气度
+        float: 计算成本
     """
+    # 定义默认返回值
+    default_result = {
+        "supply_demand": {"level": "", "reason": ""},
+        "capital_market": {"level": "", "reason": ""},
+        "policy_direction": {"level": "", "reason": ""}
+    }
+
+    # 输入数据校验
     if not analysis_of_ic_trend:
         print("警告：没有提供行业景气度分析数据")
-        return {
-            "overall_analysis": {
-                "supply_demand": "",
-                "capital_market": "",
-                "policy_direction": "",
-                "reason": ""
-            }
-        }, 0.0
-    prompt = """
-        <objective>你是一个专业的首席行业分析师，擅长分析行业景气度，你有3个子模型分析师，分别负责分析供需价格景气度模型supply_demand、政策风向景气度模型policy_direction、资本市场景气度模型capital_market，每个模型都包含研究主题相关的几个行业的模型结果。我会给你这3个模型的整体趋势分析、季度表现、主要景气等级，你需要综合这些行业的景气度，给出整体行业景气度的判断（高/中/低），并结合这三个模型对应的描述，对研究主题相关的这几个行业做出综合的模型结果解读reason。
-        <model description>供需景气度模型supply_demand：通过分析行业的产销量和盈利趋势，衡量行业在供需关系下的经营状况；政策景气度模型policy_direction：量化政策对行业的支持或限制程度，评估政策环境对行业发展的影响；资本市场景气度模型capital_market：通过股债市及投融资数据，判断资本市场对行业的资金支持和融资环境。
-        <analysis requirement>
-            1. 重点关注行业的整体趋势分析、季度表现、主要景气等级；
-            2、如果没有返回模型结果，则不需要解读输出reason，返回空字符串即可；
-            3. 解读模型结果时需要融入模型描述；
-            4. 结果解读reason中不要有数字，仅定性解读即可；
-            5. 输出格式必须为严格的JSON格式.
-        <example>
-        示例输出格式：
-        {
-            "supply_demand": {
-                "level": "高/中/低",
-                "reason": "整体分析理由"
-            },
-            "capital_market": {
-                "level": "高/中/低",
-                "reason": "整体分析理由"
-            },
-            "policy_direction": {
-                "level": "高/中/低",
-                "reason": "整体分析理由"
-            }
-        }
-        注意：如果没有对应子模型的数据，则都返回空，但是三个dict都要返回
+        return default_result, 0.0
+
+    # 优化后的提示词模板
+    prompt_template = """
+    <任务目标>
+    你是一个专业的首席行业分析师，擅长分析行业景气度，你有3个子模型分析师，分别负责分析供需价格景气度模型supply_demand、政策风向景气度模型policy_direction、资本市场景气度模型capital_market，每个模型都包含研究主题相关的几个行业的模型结果。我会给你这3个模型的整体趋势分析、季度表现、主要景气等级，你需要综合这些行业的景气度，给出整体行业景气度的判断（高/中/低），并结合这三个模型对应的描述，对研究主题相关的这几个行业做出综合的模型结果解读reason。
+    1. 重点关注行业的整体趋势分析、季度表现、主要景气等级；
+    2、如果没有返回模型结果，则不需要解读输出reason，返回空字符串即可；
+    3. 解读模型结果时需要融入模型描述；
+    4. 结果解读reason中不要有数字，仅定性解读即可；
+    5. 输出格式必须为严格的JSON格式.
+    <model description>
+    1. 供需价格景气度模型(supply_demand)：通过分析行业的产销量和盈利趋势，衡量行业在供需关系下的经营状况
+    2. 政策风向景气度模型(policy_direction) ：量化政策对行业的支持或限制程度，评估政策环境对行业发展的影响
+    3. 资本市场景气度模型(capital_market)：通过股债市及投融资数据，判断资本市场对行业的资金支持和融资环境
+
+    <分析要求>
+    1. 对每个模型给出景气度等级（高/中/低）
+    2. 结合模型特点进行定性分析，形成reason
+    3. 若无数据，返回空字符串
+    4. 输出严格遵循JSON格式
+
+    <输出示例>
+    {{
+        "supply_demand": {{
+            "level": "高/中/低",
+            "reason": "分析理由"
+        }},
+        "capital_market": {{
+            "level": "高/中/低", 
+            "reason": "分析理由"
+        }},
+        "policy_direction": {{
+            "level": "高/中/低",
+            "reason": "分析理由"
+        }}
+    }}
 
     以下是行业景气度分析结果：
     {analysis}
-    """.format(analysis=analysis_of_ic_trend)
+    """
 
-    max_retries = 5
-    retry_count = 0
+    # 配置重试机制
+    max_retries = 3
+    retry_delay = 1  # 重试间隔时间（秒）
 
-    while retry_count < max_retries:
+    for retry_count in range(max_retries):
         try:
+            # 构建完整提示词
+            prompt = prompt_template.format(analysis=analysis_of_ic_trend)
+
+            # 调用模型
             completion = qwen_client.chat.completions.create(
                 model="qwen-max-latest",
                 messages=[
-                    {"role": "system", "content": "你是一个专业的行业分析师，严格按照要求生成JSON格式的行业景气度分析。"},
+                    {"role": "system", "content": "你是专业的行业分析师，请严格按照要求生成JSON格式的行业景气度分析。"},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.6
+                temperature=0.5  # 降低随机性
             )
 
-            # 解析JSON为字典
+            # 解析结果
             analysis_result = json.loads(completion.choices[0].message.content)
 
             # 计算成本
@@ -1683,21 +1815,16 @@ def conclude_from_ic_trend_score(analysis_of_ic_trend):
             output_cost = (completion.usage.completion_tokens / 1000) * 0.0096
             cost = input_cost + output_cost
 
-            return analysis_result, cost  # 现在返回字典而非字符串
+            return analysis_result, cost
 
         except Exception as e:
-            print(f"生成行业景气度分析时出错: {e}")
-            # 返回结构一致的字典
-            return {
-                "overall_analysis": {
-                    "supply_demand": "",
-                    "capital_market": "",
-                    "policy_direction": "",
-                    "reason": ""
-                }
-            }, 0.0
+            print(f"第{retry_count + 1}次尝试失败: {str(e)}")
+            if retry_count < max_retries - 1:
+                time.sleep(retry_delay)  # 重试前等待
+
+    # 所有重试失败后返回默认值
     print(f"达到最大重试次数{max_retries}次，返回默认值")
-    return '{"industry_analysis": [], "overall_analysis": {""}}', 0.0
+    return default_result, 0.0
 # def conclude_from_ic_current_rating(ic_current_rating):
 #     [{'id': 57271, 'cics_id': 75, 'profitability_cat': '中游', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q1', 'cics_name': '土地与工程管理服务'}, {'id': 60351, 'cics_id': 75, 'profitability_cat': '中游', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q2', 'cics_name': '土地与工程管理服务'}, {'id': 57562, 'cics_id': 399, 'profitability_cat': '靠前', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q1', 'cics_name': '工程规划'}, {'id': 60642, 'cics_id': 399, 'profitability_cat': '靠前', 'financial_cat': '靠前', 'year': 2024, 'quarter': 'Q2', 'cics_name': '工程规划'}]
 #     pass
@@ -1799,16 +1926,15 @@ def conclude_from_cat_analysis(cat_analysis):
     行业杠杆水平：衡量行业企业的负债压力与偿债能力，反映其财务稳定性和风险。
     
     示例输出格式（注意转义字符）：
-    {
-        "overall_analysis": {
-            "profitability": "靠前/中游/靠后",
+    {{
+        "profitability_cat": {{
+            "level": "靠前/中游/靠后",
             "reason": "整体分析理由"
-        },
-        "financial_leverage_analysis": {
-            "financial_leverage": "高/中/低", 
+        }},
+        "financial_cat": {{
+            "level": "靠前/中游/靠后", 
             "reason": "整体分析理由"
-        }
-    }
+        }}
     }}  
     以下是行业分类数据：
     {escaped_data}
@@ -1858,10 +1984,11 @@ def conclude_from_cat_analysis(cat_analysis):
             }
         }, 0.0
 
-def tuning_third_heading(reference, writing_instructions, current_title,topic = None):
+
+def tuning_third_heading(reference, writing_instructions, current_title, topic=None):
     """
     根据参考内容生成详细的结构化信息摘要报告，并基于报告微调当前标题
-    
+
     参数:
         reference (dict): 包含参考内容和调整建议的JSON对象
         writing_instructions (str): 分析思路和指导
@@ -1926,15 +2053,13 @@ def tuning_third_heading(reference, writing_instructions, current_title,topic = 
         {report_content}
 
         优化要求：
-        1. 以研报中的行业分析为核心依据，政策信息仅在直接相关时作为补充
-        2. 保持标题简洁（10-25字），准确反映行业现状和关键趋势
-        3. 必须包含行业核心关键词和关键数据指标
-        4. 突出研报中最重要的市场动态或技术突破
-        5. 体现行业独特性和发展趋势的创新表述
-        6. 若政策信息与当前标题主题无关则不予采纳
-        7. 保留原标题合理部分，仅对需要强化的要素进行调整，并且保留当前三级标题的语言风格
-        8.一定要保留当前表的数字序号（比如1.1.1，1.1.2等）
-        9. 如果topic参数非空，优化后的标题必须符合{topic}的主题，如果在相关信息中有无关的摘要信息，则忽略。
+        1.根据参考研报、政策、产业链数据、行业景气度模型优化三级标题时，仅选择与当前标题主题相关的参考信息优化三级标题，禁止运用与当前研报主题无关的参考信息。
+        2.优化时不要改变原标题的核心主题，不要剔除关键要点，因为这些是分析师主要关注的内容，你仅需要在原标题的基础上结合相关行业的参考信息让三级标题更能体现观点，而不只是描述一个现象，例如：分析师更偏好“xx政策驱动下，企业xx意愿持续增强”这种带有观点的三级标题，而不是“xx政策对企业影响分析”
+        3.保持标题简洁精炼（15-25字），准确反映行业现状和关键趋势
+        4.突出研报中最重要的市场动态或技术突破,体现行业独特性和发展现状、发展趋势
+        5.注意不要在三级标题中显示任何指标数据、行业景气度数据，仅输出定性标题内容，也不要在三级标题中显示行业景气度模型相关的描述
+        6.一定要保留当前表的数字序号（比如1.1.1，1.1.2等）
+        7.如果topic参数非空，优化后的标题必须符合{topic}的主题，如果在相关信息中有无关的摘要信息，则忽略。
         请直接返回优化后的三级标题，不要包含其他内容。以json形式返回标题。返回格式为：{{"title":"优化后的标题"}}
         """
 
@@ -1946,14 +2071,15 @@ def tuning_third_heading(reference, writing_instructions, current_title,topic = 
             ],
             temperature=0.6,
             response_format={"type": "json_object"},
-            
+
         )
         tuned_title = tuning_completion.choices[0].message.content
         tuned_title = json.loads(tuned_title)
         tuned_title = tuned_title.get("title", current_title)
         # 计算总成本
         input_cost = (report_completion.usage.prompt_tokens + tuning_completion.usage.prompt_tokens) / 1000 * 0.0024
-        output_cost = (report_completion.usage.completion_tokens + tuning_completion.usage.completion_tokens) / 1000 * 0.0096
+        output_cost = (
+                                  report_completion.usage.completion_tokens + tuning_completion.usage.completion_tokens) / 1000 * 0.0096
         total_cost = input_cost + output_cost
 
         return tuned_title, report_content, total_cost
@@ -1961,15 +2087,117 @@ def tuning_third_heading(reference, writing_instructions, current_title,topic = 
     except Exception as e:
         print(f"生成报告或优化标题时出错: {e}")
         return current_title, "", 0.0
-
-def tuning_second_heading(third_level_headings, original_second_level_heading,topic = None):
+# def tuning_third_heading(reference, writing_instructions, current_title,topic = None):
+#     """
+#     根据参考内容生成详细的结构化信息摘要报告，并基于报告微调当前标题
+#
+#     参数:
+#         reference (dict): 包含参考内容和调整建议的JSON对象
+#         writing_instructions (str): 分析思路和指导
+#         current_title (str): 当前需要调整的标题
+#
+#     返回:
+#         tuple: (调整后的标题, 结构化信息摘要报告, 成本)
+#     """
+#     # 第一步：生成结构化信息摘要报告
+#     report_prompt = f"""
+#     你是一个专业的行业分析师，请根据以下参考内容生成一份详细的结构化信息摘要报告。报告应包括以下部分：
+#
+#     1. 行业概况
+#         - 基于report_source中的研报信息，总结行业现状和发展趋势
+#         - 结合industry_indicator_part_1和industry_indicator_part_2，分析行业景气度
+#
+#     2. 政策影响
+#         - 根据policy_source中的政策信息，分析政策对行业的影响
+#         - 评估政策实施效果和未来政策方向
+#
+#     3. 产业链分析
+#         - 基于indicators中的产业链数据，分析上下游关系
+#         - 评估产业链各环节的竞争力和发展潜力
+#
+#     4. 投资建议
+#         - 综合以上分析，给出行业投资建议
+#         - 识别潜在风险和机会
+#
+#     报告要求：
+#     - 使用结构化格式，每个部分使用二级标题
+#     - 数据引用需注明来源
+#     - 分析需有数据支撑
+#     - 结论需清晰明确
+#     - 必须严格符合研报主旨
+#     参考内容：
+#     {reference}
+#     分析思路：
+#     {writing_instructions}
+#     研报主旨：
+#     {topic}
+#
+#     """
+#
+#     try:
+#         # 生成摘要报告
+#         report_completion = qwen_client.chat.completions.create(
+#             model="qwen-max-latest",
+#             messages=[
+#                 {"role": "system", "content": "你是一个专业的行业分析师，能够生成结构化的信息摘要报告。"},
+#                 {"role": "user", "content": report_prompt}
+#             ],
+#             temperature=0.6
+#         )
+#         report_content = report_completion.choices[0].message.content
+#
+#         # 第二步：基于摘要报告微调标题
+#         tuning_prompt = f"""
+#         你是一个专业的标题优化专家，请根据以下信息优化当前的三级标题：
+#
+#         当前拼接的一级标题+二级标题+三级标题：{current_title}
+#         相关信息摘要：
+#         {report_content}
+#
+#         优化要求：
+#         1. 以研报中的行业分析为核心依据，政策信息仅在直接相关时作为补充
+#         2. 保持标题简洁（10-25字），准确反映行业现状和关键趋势
+#         3. 必须包含行业核心关键词和关键数据指标
+#         4. 突出研报中最重要的市场动态或技术突破
+#         5. 体现行业独特性和发展趋势的创新表述
+#         6. 若政策信息与当前标题主题无关则不予采纳
+#         7. 保留原标题合理部分，仅对需要强化的要素进行调整，并且保留当前三级标题的语言风格
+#         8.一定要保留当前表的数字序号（比如1.1.1，1.1.2等）
+#         9. 如果topic参数非空，优化后的标题必须符合{topic}的主题，如果在相关信息中有无关的摘要信息，则忽略。
+#         请直接返回优化后的三级标题，不要包含其他内容。以json形式返回标题。返回格式为：{{"title":"优化后的标题"}}
+#         """
+#
+#         tuning_completion = qwen_client.chat.completions.create(
+#             model="qwen-max-latest",
+#             messages=[
+#                 {"role": "system", "content": "你是一个专业的标题优化专家，能够根据内容优化标题。"},
+#                 {"role": "user", "content": tuning_prompt}
+#             ],
+#             temperature=0.6,
+#             response_format={"type": "json_object"},
+#
+#         )
+#         tuned_title = tuning_completion.choices[0].message.content
+#         tuned_title = json.loads(tuned_title)
+#         tuned_title = tuned_title.get("title", current_title)
+#         # 计算总成本
+#         input_cost = (report_completion.usage.prompt_tokens + tuning_completion.usage.prompt_tokens) / 1000 * 0.0024
+#         output_cost = (report_completion.usage.completion_tokens + tuning_completion.usage.completion_tokens) / 1000 * 0.0096
+#         total_cost = input_cost + output_cost
+#
+#         return tuned_title, report_content, total_cost
+#
+#     except Exception as e:
+#         print(f"生成报告或优化标题时出错: {e}")
+#         return current_title, "", 0.0
+def tuning_second_heading(third_level_headings, original_second_level_heading, topic=None):
     """
     根据三级标题内容优化二级标题
-    
+
     Args:
         third_level_headings (list): 三级标题列表
         original_second_level_heading (str): 原始二级标题
-        
+
     Returns:
         str: 优化后的二级标题
     """
@@ -1983,7 +2211,7 @@ def tuning_second_heading(third_level_headings, original_second_level_heading,to
         {third_level_headings}
 
         优化要求：
-        1. 基于所有三级标题的核心内容进行概括和提炼
+        1. 对所有相关三级标题的核心内容进行概括和提炼，优化当前二级标题
         2. 保持标题简洁（10-20字），准确反映整体内容
         3. 必须包含核心关键词
         4. 突出最重要的主题和方向
@@ -2004,7 +2232,7 @@ def tuning_second_heading(third_level_headings, original_second_level_heading,to
             temperature=0.6,
             response_format={"type": "json_object"}
         )
-        
+
         # 解析并返回优化后的标题
         optimized_title = json.loads(completion.choices[0].message.content)
         return optimized_title.get("new_second_heading", original_second_level_heading)
@@ -2012,6 +2240,108 @@ def tuning_second_heading(third_level_headings, original_second_level_heading,to
     except Exception as e:
         print(f"优化二级标题时出错: {e}")
         return original_second_level_heading
+
+
+def tuning_first_heading(second_level_headings, original_first_level_heading, topic=None):
+    """
+    根据二级标题内容优化一级标题
+
+    Args:
+        third_level_headings (list): 二级标题列表
+        original_second_level_heading (str): 原始一级标题
+
+    Returns:
+        str: 优化后的二级标题
+    """
+    try:
+        # 构建提示词
+        prompt = f"""
+        你是一个专业的标题优化专家，请根据以下信息优化当前的一级标题：
+
+        当前一级标题：{original_first_level_heading}
+        相关二级标题内容：
+        {second_level_headings}
+
+        优化要求：
+        1. 对所有相关二级标题的核心内容进行概括和提炼，优化当前一级标题
+        2. 保持标题简洁（10-20字），准确反映整体内容
+        3. 必须包含核心关键词
+        4. 突出最重要的主题和方向
+        5. 保留原标题合理部分，仅对需要强化的要素进行调整，并且保留当前一级标题的语言风格
+        6. 一定要保留当前标题的数字序号
+        7. 如果topic参数非空，优化后的标题必须符合{topic}的主题，如果在相关信息中有无关的摘要信息，则忽略。
+        请直接返回优化后的标题，不要包含其他内容。以json形式返回标题。返回格式为：{{"new_second_heading":"优化后的标题"}}
+        """
+
+        # 调用Qwen模型进行优化
+        completion = qwen_client.chat.completions.create(
+            model="qwen-max-latest",
+            messages=[
+                {"role": "system", "content": "你是一个专业的标题优化专家，能够根据内容优化标题。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.6,
+            response_format={"type": "json_object"}
+        )
+
+        # 解析并返回优化后的标题
+        optimized_title = json.loads(completion.choices[0].message.content)
+        return optimized_title.get("new_second_heading", original_first_level_heading)
+
+    except Exception as e:
+        print(f"优化一级标题时出错: {e}")
+        return original_first_level_heading
+
+# def tuning_second_heading(third_level_headings, original_second_level_heading,topic = None):
+#     """
+#     根据三级标题内容优化二级标题
+#
+#     Args:
+#         third_level_headings (list): 三级标题列表
+#         original_second_level_heading (str): 原始二级标题
+#
+#     Returns:
+#         str: 优化后的二级标题
+#     """
+#     try:
+#         # 构建提示词
+#         prompt = f"""
+#         你是一个专业的标题优化专家，请根据以下信息优化当前的二级标题：
+#
+#         当前二级标题：{original_second_level_heading}
+#         相关三级标题内容：
+#         {third_level_headings}
+#
+#         优化要求：
+#         1. 基于所有三级标题的核心内容进行概括和提炼
+#         2. 保持标题简洁（10-20字），准确反映整体内容
+#         3. 必须包含核心关键词
+#         4. 突出最重要的主题和方向
+#         5. 保留原标题合理部分，仅对需要强化的要素进行调整，并且保留当前二级标题的语言风格
+#         6. 一定要保留当前标题的数字序号（比如1.1，1.2等）
+#         7. 如果topic参数非空，优化后的标题必须符合{topic}的主题，如果在相关信息中有无关的摘要信息，则忽略。
+#
+#         请直接返回优化后的标题，不要包含其他内容。以json形式返回标题。返回格式为：{{"new_second_heading":"优化后的标题"}}
+#         """
+#
+#         # 调用Qwen模型进行优化
+#         completion = qwen_client.chat.completions.create(
+#             model="qwen-max-latest",
+#             messages=[
+#                 {"role": "system", "content": "你是一个专业的标题优化专家，能够根据内容优化标题。"},
+#                 {"role": "user", "content": prompt}
+#             ],
+#             temperature=0.6,
+#             response_format={"type": "json_object"}
+#         )
+#
+#         # 解析并返回优化后的标题
+#         optimized_title = json.loads(completion.choices[0].message.content)
+#         return optimized_title.get("new_second_heading", original_second_level_heading)
+#
+#     except Exception as e:
+#         print(f"优化二级标题时出错: {e}")
+#         return original_second_level_heading
 
 
 def tuning_first_heading(second_level_headings, original_first_level_heading, topic = None):
@@ -2285,5 +2615,24 @@ def get_ana_instruction_for_second_level(third_level_titles, current_second_leve
 
 
 if __name__ == "__main__":
-    result = year_extract_from_title("AI芯片市场分析")
+    data = [
+        {'id': 57209, 'cics_id': 6, 'profitability_cat': '靠前', 'year': 2024, 'quarter': 'Q1',
+         'cics_name': '交通运输设备'},
+        {'id': 60289, 'cics_id': 6, 'profitability_cat': '靠前', 'year': 2024, 'quarter': 'Q2',
+         'cics_name': '交通运输设备'},
+        {'id': 310158, 'cics_id': 6, 'profitability_cat': '靠前', 'year': 2024, 'quarter': 'Q3',
+         'cics_name': '交通运输设备'}]
+
+    result,cost = conclude_from_cat_analysis(data)
     print(result)
+    # filtered_result_ic_current_rating_temp: [
+    #     {'id': 57209, 'cics_id': 6, 'profitability_cat': '靠前', 'year': 2024, 'quarter': 'Q1',
+    #      'cics_name': '交通运输设备'},
+    #     {'id': 60289, 'cics_id': 6, 'profitability_cat': '靠前', 'year': 2024, 'quarter': 'Q2',
+    #      'cics_name': '交通运输设备'},
+    #     {'id': 310158, 'cics_id': 6, 'profitability_cat': '靠前', 'year': 2024, 'quarter': 'Q3',
+    #      'cics_name': '交通运输设备'}]
+
+    # result = year_extract_from_title("AI芯片市场分析")
+    # print(result)
+

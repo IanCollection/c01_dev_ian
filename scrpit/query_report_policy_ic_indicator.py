@@ -388,6 +388,7 @@ def query_relative_data_v2(year, current_title, analysis_response=None):
                     ic_current_rating = [] # Initialize before try
                     filtered_result_ic_current_rating_temp = [] # Use temp var
                     try:
+                        print(f"开始查询ic_current_rating：{cics_ids}")
                         ic_current_rating = query_ic_current_rating(cics_ids, year)
                         if ic_current_rating:
                             potential_cat_labels = ['profitability_cat', 'supply_demand']
@@ -580,30 +581,6 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
         print(f"第二次过滤后的report_query_response的长度为{len(report_query_response)}")
         print(f"第二次过滤后的report_query_response:{report_query_response}")
 
-
-        # final_reports_v2 = [] # 使用新变量存储最终结果
-        # with concurrent.futures.ThreadPoolExecutor() as executor:
-        #     # 提交所有判断任务，仅处理有content的元素
-        #     future_to_report = {
-        #         executor.submit(judge_topic_relevance, topic, report['file_node_name']): report
-        #         for report in report_query_response if report.get('file_node_name')
-        #     }
-        #
-        #     # 过滤保留相关的内容
-        #     for future in concurrent.futures.as_completed(future_to_report):
-        #         report = future_to_report[future]
-        #         try:
-        #             if future.result():  # 如果返回True则保留
-        #                 final_reports_v2.append(report) # 添加到新变量
-        #         except Exception as e:
-        #             print(f"判断报告主题相关性时出错: {e}")
-        #
-        #     # 更新report_query_response为最终过滤后的结果
-        #     report_query_response = final_reports_v2 # 赋值最终结果
-        #
-
-        # print(report_query_response)
-        # print(len(report_query_response))
         # 政策v2
         # policy,policy_ids = es_vector_query(query_text)
         policy, policy_ids = es_vector_query_policy_info(query_text)
@@ -726,9 +703,8 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
         if all_cics_label:
             try:
                 cics_ids = get_cics_id_by_name(all_cics_label)
-                print(f"cics_ids:{cics_ids}")
-                # print(f"cics_ids:{cics_ids}")
-                # 检查cics_ids是否为None或空列表
+                print(f"[DEBUG] CICS IDs: {cics_ids}") # 确认 CICS ID
+
                 if cics_ids is None:
                     # 处理SQL错误情况
                     # print(f"查询CICS ID时发生SQL错误")
@@ -739,6 +715,7 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                     ic_trend_scores = [] # Initialize before try
                     try:
                         ic_trend_scores = query_ic_trend_score(cics_ids, year)
+                        print(f"[DEBUG] 景气度查询结果: {ic_trend_scores}")
                     except Exception as e:
                         print(f"[ERROR] 景气度查询失败: {str(e)}")
                         industry_analysis["error"] = f"景气度数据异常：{str(e)}"
@@ -746,6 +723,7 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
 
                     analysis_results_ictrend = [] # Initialize before check
                     if ic_trend_scores:
+                        print(f"[DEBUG] 景气度查询结果: {ic_trend_scores}")
                         if potential_ic_trend_labels:
                             # 定义需要保留的基础字段
                             base_fields = ['id', 'date', 'cics_id', 'cics_name', 'updated_at']
@@ -761,15 +739,19 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                                 filtered_score = {k: v for k, v in score.items() if k in keep_fields}
                                 filtered_scores.append(filtered_score)
                             ic_trend_scores = filtered_scores # Overwrite with filtered list
-
+                        print(f"开始行业景气度分析_742：{ic_trend_scores}")
                         analysis_results_ictrend = analyze_industry_trends(ic_trend_scores) # Assign result
-
+                        print(f"[DEBUG] 行业景气度分析结果_742: {analysis_results_ictrend}")
                     # Ensure analysis_results_ictrend_v2 and industry_analysis are assigned dicts
                     if analysis_results_ictrend:
+                        print(f"开始行业景气度分析_747：{analysis_results_ictrend}")
                         _analysis_results_ictrend_v2_temp = get_analysis_summary(analysis_results_ictrend) # Use temp
+                        print(f"[DEBUG] 行业景气度分析结果_746: {_analysis_results_ictrend_v2_temp}")
                         if _analysis_results_ictrend_v2_temp: # Check if summary is not empty
                            analysis_results_ictrend_v2 = _analysis_results_ictrend_v2_temp # Assign dict
+                           print(f"开始行业景气度分析：{analysis_results_ictrend_v2}")
                            industry_analysis, cost = conclude_from_ic_trend_score(analysis_results_ictrend_v2) # Assign dict
+                           print(f"[DEBUG] 行业景气度分析结果_750: {industry_analysis}")
                         # else: analysis_results_ictrend_v2 and industry_analysis keep default empty/initial values
                     # else: analysis_results_ictrend_v2 and industry_analysis keep default empty/initial values
 
@@ -778,13 +760,18 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                     filtered_result_ic_current_rating_temp = [] # Use temp var
                     try:
                         ic_current_rating = query_ic_current_rating(cics_ids, year)
+                        print(f"[DEBUG] ic_current_rating: {ic_current_rating}")
                         if ic_current_rating:
                             potential_cat_labels = ['profitability_cat', 'supply_demand']
+                            print(f"开始过滤ic_current_rating：{ic_current_rating}")
                             filtered_result_ic_current_rating_temp = filter_ic_current_rating(ic_current_rating, potential_cat_labels) # Assign temp var
+                            print(f"[DEBUG] filtered_result_ic_current_rating_temp: {filtered_result_ic_current_rating_temp}")
                             # print('已查询到ic_current_rating')
                             # print(filtered_result_ic_current_rating_temp)
                     except Exception as e:
-                        print(f"处理 ic_current_rating 查询时出错: {str(e)}")
+                        print(f"[ERROR] 处理 ic_current_rating 时出错: 类型={type(e)}, 错误={e}")
+                        import traceback
+                        traceback.print_exc() # 打印详细堆栈
                         # ic_current_rating and filtered_result_ic_current_rating_temp remain []
 
                     # Assign final value for filtered_result_ic_current_rating
@@ -793,6 +780,7 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                     # Ensure cat_indicators is assigned a list
                     if filtered_result_ic_current_rating: # Check the final list
                         cat_indicators, cost = conclude_from_cat_analysis(filtered_result_ic_current_rating) # Assign list
+                        print(f"[DEBUG] cat_indicators: {cat_indicators}")
                         # print(cat_indicators)
                     # else: cat_indicators keeps default empty list []
 

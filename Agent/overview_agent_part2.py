@@ -385,13 +385,13 @@ if __name__ == "__main__":
                     # 设置默认值以避免程序崩溃
                     reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = [], [], [], [], "", [], {}, [], {}, {}
 
-                ic_trends_analysis = process_ic_trends(ic_trends)
+                # ic_trends_analysis = process_ic_trends(ic_trends)
                 instruction = instruction or "无具体分析思路"
                 print(f"current_instruction:{instruction}")
                 reference = {
                     "report_source": reports if isinstance(reports, list) else [],
                     "policy_source": policy if isinstance(policy, list) else [],
-                    "industry_indicator_part_1": ic_trends_analysis,
+                    "industry_indicator_part_1": ic_trends if ic_trends else "",
                     "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
                     "industry_indicator_part_2": ic_current,
                     "industry_indicator_part_2_analysis": filtered_result_ic_current_rating if isinstance(

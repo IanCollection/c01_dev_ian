@@ -60,7 +60,7 @@ def judge_title_relevance(current_title: str, header_content: str) -> bool:
         
         # 调用Qwen-turbo模型进行判断
         completion = qwen_client.chat.completions.create(
-            model="qwen-plus-latest",
+            model="qwen-long-latest",
             messages=[
                 {"role": "system", "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
                 {"role": "user", "content": prompt}
@@ -118,7 +118,7 @@ def judge_topic_relevance(topic: str, header_content: str) -> bool:
         print(f"当前标题: {topic}")
         print(f"当前内容: {header_content}")
         completion = qwen_client.chat.completions.create(
-            model="qwen-plus-latest",
+            model="qwen-long-latest",
             messages=[
                 {"role": "system",
                  "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
@@ -175,7 +175,7 @@ def industry_indicator_relevance(industry_list: List[str], current_title: str) -
         
         # 调用Qwen-turbo模型进行判断
         completion = qwen_client.chat.completions.create(
-            model="qwen-max-latest",
+            model="qwen-long-latest",
             messages=[
                 {"role": "system", "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
                 {"role": "user", "content": prompt}

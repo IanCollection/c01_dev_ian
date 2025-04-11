@@ -1099,7 +1099,7 @@ def query_title_info():
             reports, policy, ic_trends, ic_current, instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_relative_data_v3(year, combined_title, instruction, input_title)
             
             # 处理数据
-            ic_trends_analysis = process_ic_trends(ic_trends)
+            # ic_trends_analysis = process_ic_trends(ic_trends)
             ic_current = ic_current if isinstance(ic_current, str) else "无相关数据"
             instruction = instruction or "无具体写作指导"
             
@@ -1110,7 +1110,7 @@ def query_title_info():
                     "reference": {
                         "report_source": reports if isinstance(reports, list) else [],
                         "policy_source": policy if isinstance(policy, list) else [],
-                        "industry_indicator_part_1": ic_trends_analysis,
+                        "industry_indicator_part_1": ic_trends if ic_trends else "",
                         "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
                         "industry_indicator_part_2": ic_current,
                         "industry_indicator_part_2_analysis": filtered_result_ic_current_rating,
@@ -1255,7 +1255,8 @@ def edit_second_level_title():
                 "reference": {
                     "report_source": reports if isinstance(reports, list) else [],
                     "policy_source": policy if isinstance(policy, list) else [],
-                    "industry_indicator_part_1": process_ic_trends(ic_trends),
+                    # "industry_indicator_part_1": process_ic_trends(ic_trends),
+                    "industry_indicator_part_1": ic_trends if ic_trends else "",
                     "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
                     "industry_indicator_part_2": ic_current,
                     "industry_indicator_part_2_analysis": filtered_result_ic_current_rating if isinstance(
@@ -1350,14 +1351,14 @@ def edit_first_level_title():
                     print(f"错误：调用 query_relative_data_v3 时发生异常: {e}")
                     reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = [], [], [], [], "", [], {}, [], {}, {}
 
-                ic_trends_analysis = process_ic_trends(ic_trends)
+                # ic_trends_analysis = process_ic_trends(ic_trends)
                 writing_instruction = writing_instruction or "无具体分析思路"
                 print(f"Instruction returned from query_relative_data_v3: {writing_instruction}")
 
                 reference = {
                     "report_source": reports if isinstance(reports, list) else [],
                     "policy_source": policy if isinstance(policy, list) else [],
-                    "industry_indicator_part_1": ic_trends_analysis,
+                    "industry_indicator_part_1": ic_trends if ic_trends else "",
                     "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
                     "industry_indicator_part_2": ic_current,
                     "industry_indicator_part_2_analysis": filtered_result_ic_current_rating if isinstance(

@@ -136,15 +136,16 @@ def process_third_level_title(first_level_title, second_level_title, third_level
             print(f"查询数据时出错 {combined_title}: {str(query_error)}")
             return create_error_third_level(third_level_section)
 
+        print(f'ic_trends_mile_stone4:{ic_trends}')
         # 处理数据
-        ic_trends_analysis = process_ic_trends(ic_trends)
+        # ic_trends_analysis = process_ic_trends(ic_trends)
         # ic_current = ic_current if isinstance(ic_current, str) else "无相关数据"
         instruction = writing_instruction or "无具体写作指导"
 
         reference = {
             "report_source": reports if isinstance(reports, list) else [],
             "policy_source": policy if isinstance(policy, list) else [],
-            "industry_indicator_part_1": ic_trends_analysis,
+            "industry_indicator_part_1": ic_trends if ic_trends else "",
             "industry_indicator_part_1_analysis":analysis_results_ictrend_v2,
             "industry_indicator_part_2": ic_current,
             "industry_indicator_part_2_analysis":filtered_result_ic_current_rating,
