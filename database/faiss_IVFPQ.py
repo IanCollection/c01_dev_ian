@@ -687,91 +687,169 @@ def add_small_batch(texts_with_ids, type, auto_retrain=True, retrain_ratio=0.3):
 
 def build_index_flat(texts_with_ids, type):
     """
-    构建文件名的FAISS Flat索引
-    
+    构建或更新文件名的FAISS Flat索引（支持增量添加）
+
     Args:
-        texts_with_ids (dict): 文本ID和内容的字典映射
-        type (str): 索引类型,可选"header"或"content"
-        
+        texts_with_ids (dict): 新增的文本ID和内容的字典映射
+        type (str): 索引类型，应为 "filename"
+
     Returns:
-        faiss.IndexIDMap: 构建好的FAISS索引
+        tuple: (构建/更新后的FAISS索引, 本次操作的成本)
     """
+    if type != "filename":
+        print(f"警告: build_index_flat 函数预期类型为 'filename', 但收到 '{type}'.")
+        # 可以选择抛出错误或继续，但逻辑主要为filename设计
+        # raise ValueError("build_index_flat is designed for type 'filename'")
 
-    text_ids = list(texts_with_ids.keys())
-    texts = list(texts_with_ids.values())
-    total_cost = 0
-    # 批量获取各部分的嵌入向量
-    text_embeddings,cost = get_embeddings(texts, text_ids)
-    total_cost+=cost
-    # 转换字典为向量数组和ID数组
-    vectors = np.array(list(text_embeddings.values()), dtype=np.float32)
-    ids = np.array([int(k) for k in text_embeddings.keys()], dtype=np.int64)
-
-    # 确保向量矩阵形状正确
-    print(f"向量矩阵形状: {vectors.shape}")  # 应该是 (N, 512)
-    print(f"ID数组形状: {ids.shape}")  # 应该是 (N,)
-
-    # 1. 创建支持 ID 的索引
-    dim = 512  # 向量维度
-    index_flat = faiss.IndexFlatL2(dim)  # 创建Flat索引
-    index_with_ids = faiss.IndexIDMap(index_flat)  # 包装为支持ID的索引
-
-    # 2. 添加向量和ID到索引
-    index_with_ids.add_with_ids(vectors, ids)
-    print(f"索引中的向量数量: {index_with_ids.ntotal}")  # 应该等于 vectors.shape[0]
-
-    # 保存索引到文件
-    # 确保存储目录存在
     save_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "faiss_index_sc")
     os.makedirs(save_dir, exist_ok=True)
-    
-    try:
-        if type == "filename":
-            index_path = os.path.join(save_dir, "filename_index_flat.index")
-        elif type == "header":
-            index_path = os.path.join(save_dir, "header_index_IVFPQ.index")
-        else:
-            index_path = os.path.join(save_dir, "content_index_IVFPQ.index")
-        faiss.write_index(index_with_ids, index_path)
-        print(f"成功保存FAISS索引文件: {index_path}")
-        
-        # 保存ID映射
-        ids_list = ids.tolist()
-        ids_path = index_path.replace(".index", "_ids.json")
-        with open(ids_path, 'w', encoding='utf-8') as f:
-            json.dump(ids_list, f)
-        print(f"成功保存ID映射文件: {ids_path}")
-    except Exception as e:
-        print(f"保存索引文件失败: {str(e)}")
 
-    # 记录开始时间
+    index_path = os.path.join(save_dir, "filename_index_flat.index")
+    ids_path = os.path.join(save_dir, "filename_index_flat_ids.json") # 注意，这里之前可能是 .npy，但Flat索引通常ID较少，json也可
+    meta_file = os.path.join(save_dir, f"{type}_meta.json")
+
+    dim = 512  # 假设向量维度为 512
+    total_cost = 0
     start_time = time.time()
-    
-    # 计算耗时
-    build_duration = time.time() - start_time
-    print(f"构建Flat索引完成，耗时 {build_duration:.2f} 秒")
-    
-    # 保存元数据
-    meta_data = {
-        'total_vectors': len(ids),
-        'last_updated': datetime.datetime.now().isoformat(),
-        'index_type': 'flat',
-        'training_time_seconds': build_duration,
-        'history': [{
-            'time': datetime.datetime.now().isoformat(),
-            'operation': 'build_flat_index',
-            'added_vectors': len(ids),
-            'total_vectors': len(ids),
-            'training_seconds': build_duration
-        }]
-    }
-    
-    meta_file = index_path.replace(".index", "_meta.json")
-    with open(meta_file, 'w') as f:
-        json.dump(meta_data, f, indent=2)
-    print(f"成功保存元数据文件: {meta_file}")
+    operation_type = 'initial_build' # 默认为初始构建
 
-    return index_with_ids,total_cost
+    # --- 开始修改 ---
+    existing_ids_list = []
+    index_with_ids = None
+
+    # 1. 检查并加载现有索引和ID
+    if os.path.exists(index_path) and os.path.exists(ids_path):
+        try:
+            print(f"加载现有索引: {index_path}")
+            index_read = faiss.read_index(index_path)
+            # 确保加载的是 IndexIDMap，如果不是则包装
+            if isinstance(index_read, faiss.IndexIDMap):
+                 index_with_ids = index_read
+            else:
+                 # 如果之前保存的不是 IndexIDMap (虽然不太可能，但做个兼容)
+                 print("警告：加载的索引不是 IndexIDMap，将尝试包装。")
+                 index_with_ids = faiss.IndexIDMap(index_read)
+
+            print(f"加载现有 IDs: {ids_path}")
+            with open(ids_path, 'r', encoding='utf-8') as f:
+                existing_ids_list = json.load(f)
+            print(f"已加载 {len(existing_ids_list)} 个现有 IDs。")
+            operation_type = 'update' # 标记为更新操作
+        except Exception as e:
+            print(f"加载现有索引或ID失败: {e}。将重新创建。")
+            index_with_ids = None # 重置以确保创建新索引
+            existing_ids_list = []
+
+    # 2. 如果没有加载现有索引，则创建新索引
+    if index_with_ids is None:
+        print("创建新的 Flat 索引...")
+        index_flat = faiss.IndexFlatL2(dim)
+        index_with_ids = faiss.IndexIDMap(index_flat)
+        existing_ids_list = [] # 确保 ID 列表为空
+
+    # 3. 处理传入的新文本和ID
+    new_text_ids_str = list(texts_with_ids.keys())
+    # 过滤掉已经存在的 ID，避免重复添加
+    new_text_ids_to_process = {
+        text_id: text
+        for text_id, text in texts_with_ids.items()
+        if int(text_id) not in [int(existing_id) for existing_id in existing_ids_list]
+    }
+
+    added_vectors_count = 0
+    if not new_text_ids_to_process:
+        print("没有新的、唯一的文本ID需要处理。")
+    else:
+        print(f"准备处理 {len(new_text_ids_to_process)} 个新的文本ID...")
+        new_texts = list(new_text_ids_to_process.values())
+        new_ids_str = list(new_text_ids_to_process.keys())
+
+        # 4. 批量获取新文本的嵌入向量
+        new_embeddings, cost = get_embeddings(new_texts, new_ids_str)
+        total_cost += cost
+
+        # 5. 转换新数据为向量和ID数组 (确保ID是 int64)
+        new_embedding_ids_str = list(new_embeddings.keys())
+        new_vectors = np.array(list(new_embeddings.values()), dtype=np.float32)
+        new_ids_int64 = np.array([int(k) for k in new_embedding_ids_str], dtype=np.int64)
+        new_ids_list = [int(k) for k in new_embedding_ids_str] # 用于更新json列表
+
+        # 确保新向量和ID数量匹配
+        if new_vectors.shape[0] != len(new_ids_int64):
+             print(f"警告: 新向量数量 ({new_vectors.shape[0]}) 与新 ID 数量 ({len(new_ids_int64)}) 不匹配。跳过添加。")
+        elif new_vectors.shape[0] > 0:
+            # 6. 添加新向量和ID到索引
+            print(f"添加 {new_vectors.shape[0]} 个新向量到索引...")
+            index_with_ids.add_with_ids(new_vectors, new_ids_int64)
+            added_vectors_count = new_vectors.shape[0]
+
+            # 7. 更新总的ID列表
+            existing_ids_list.extend(new_ids_list)
+        else:
+            print("没有生成有效的嵌入向量来添加。")
+
+    # --- 结束修改 ---
+
+    print(f"索引中最终向量数量: {index_with_ids.ntotal}")
+
+    # 8. 保存更新后的索引到文件
+    try:
+        faiss.write_index(index_with_ids, index_path)
+        print(f"成功保存更新后的FAISS索引文件: {index_path}")
+
+        # 9. 保存更新后的ID列表
+        with open(ids_path, 'w', encoding='utf-8') as f:
+            json.dump([int(id_val) for id_val in existing_ids_list], f)
+        print(f"成功保存更新后的ID映射文件: {ids_path}")
+    except Exception as e:
+        print(f"保存索引或ID文件失败: {str(e)}")
+        # 可以考虑在这里返回错误或之前的状态
+
+    build_duration = time.time() - start_time
+    print(f"{operation_type} Flat索引完成，耗时 {build_duration:.2f} 秒")
+
+    # 10. 更新并保存元数据
+    meta_data = {}
+    if os.path.exists(meta_file):
+        try:
+            with open(meta_file, 'r', encoding='utf-8') as f:
+                meta_data = json.load(f)
+            # 确保 history 字段存在且是列表
+            if 'history' not in meta_data or not isinstance(meta_data.get('history'), list):
+                 meta_data['history'] = []
+            print(f"成功加载现有元数据: {meta_file}")
+        except Exception as e:
+            print(f"加载元数据文件失败: {e}。将创建新的元数据。")
+            meta_data = {'history': []} # 创建空的元数据
+    else:
+        print(f"元数据文件不存在: {meta_file}。将创建新的元数据。")
+        meta_data = {'history': []}
+
+    meta_data.update({
+        'total_vectors': index_with_ids.ntotal,
+        'last_updated': datetime.datetime.now().isoformat(),
+        'index_type': 'flat', # 明确索引类型
+        # Flat 索引没有训练时间，但可以记录本次操作耗时
+        'last_operation_seconds': build_duration
+    })
+
+    # 添加历史记录
+    meta_data['history'].append({
+        'time': datetime.datetime.now().isoformat(),
+        'operation': operation_type, # 'initial_build' 或 'update'
+        'added_vectors': added_vectors_count, # 本次实际添加的向量数
+        'total_vectors': index_with_ids.ntotal,
+        'operation_seconds': build_duration
+    })
+
+    try:
+        with open(meta_file, 'w', encoding='utf-8') as f:
+            json.dump(meta_data, f, indent=2, ensure_ascii=False)
+        print(f"成功保存更新后的元数据文件: {meta_file}")
+    except Exception as e:
+        print(f"保存元数据文件失败: {e}")
+
+    return index_with_ids, total_cost
 
 def add_vectors_in_batches(index, vectors, ids, batch_size=10000):
     """分批添加向量到索引，避免内存峰值过高

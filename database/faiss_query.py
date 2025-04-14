@@ -455,10 +455,48 @@ def search(query, index_type='content', top_k=5):
 
 # 示例用法
 if __name__ == "__main__":
+    # print(1)
+    # # 加载filename索引并打印维度
+    try:
+        base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "faiss_index_sc")
+        filename_index_path = os.path.join(base_path, "filename_index_flat.index")
+        filename_ids_path = os.path.join(base_path, "filename_index_flat_ids.json")
+
+        print("正在加载filename索引...")
+        filename_index = faiss.read_index(filename_index_path)
+
+        # 获取并打印索引维度
+        dimension = filename_index.d
+        print(f"filename索引维度: {dimension}")
+
+        # 打印索引类型和向量总数
+        print(f"索引类型: {type(filename_index).__name__}")
+        print(f"向量总数: {filename_index.ntotal}")
+
+        # 加载并打印IDs
+        with open(filename_ids_path, 'r', encoding='utf-8') as f:
+            ids = json.load(f)
+        print(f"IDs数量: {len(ids)}")
+        print(f"IDs示例: {ids[:5] if len(ids) > 5 else ids}")
+    except Exception as e:
+        print(f"加载filename索引失败: {e}")
+
+
+
     # 示例查询
-    query_text = "商业地产行业展望"
-    result = search_and_query(query_text)
-    print(result)
+    # query_text = "商业地产行业展望"
+    # result = search_and_query(query_text)
+    # print(result)
+
+    # result = search_and_query(query_text, index_type='header')
+    # print(f"header: {result}")
+
+
+    # reuslt = search_and_query(query_text, index_type='filename')
+    # print(f"filename: {result}")
+
+
+
 
     # print("在文件名中搜索:")
     # filename_results = search(query_text, index_type='filename')

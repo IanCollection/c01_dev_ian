@@ -99,14 +99,23 @@ def build_all(id, title, org_name, file_url, publish_at, s3_url):
 
     # 1. 获取pdf_parse数据
     response = parse_pdf(s3_url)
+    
+    # 检查response中是否包含error信息
+    if response.get('error'):
+        print(f"解析PDF时出错: {response.get('error')}")
+        return {}, {}, {}
+    
     content_list = response.get('content_list', [])
     images = response.get('images', [])
-    
-    # 2. 构建neo4j节点
-    filename_dict, headers_dict, content_dict = build_neo4j_nodes(
-        content_list, images, id, title, org_name, file_url, publish_at, s3_url
-    )
-    
+
+    if content_list:
+        # 2. 构建neo4j节点
+        filename_dict, headers_dict, content_dict = build_neo4j_nodes(
+            content_list, images, id, title, org_name, file_url, publish_at, s3_url
+        )
+    else:
+        filename_dict, headers_dict, content_dict = {}, {}, {}
+        
     # 返回构建的三个字典
     return filename_dict, headers_dict, content_dict
 
@@ -160,11 +169,9 @@ def update_faiss_indices(new_items, index_type, processed_ids_file):
             if os.path.exists(processed_ids_file):
                 with open(processed_ids_file, 'r', encoding='utf-8') as f:
                     processed_ids = set(json.load(f))
-            
             processed_ids.update(actual_new_items.keys())
             with open(processed_ids_file, 'w', encoding='utf-8') as f:
                 json.dump(list(processed_ids), f)
-        
         return success, cost
     except Exception as e:
         print(f"更新{index_type}索引失败: {str(e)}")
@@ -178,12 +185,12 @@ if __name__ == "__main__":
     # 获取当前文件的绝对路径
     current_dir = os.path.dirname(os.path.abspath(__file__))
     # 构建Excel文件的绝对路径
-    excel_path = os.path.join(current_dir, "..", "data", "Copy of 洞见研报报告列表-for test(1).xlsx")
+    excel_path = os.path.join(current_dir, "..", "data", "25年研报列表.xlsx")
     
     # 读取研报信息
     logger.info("开始读取研报信息...")
     reports_info = pd.read_excel(excel_path)
-    reports_info = reports_info.iloc[100:]
+    reports_info = reports_info.iloc[8:]
     logger.info(f"读取了{len(reports_info)}条研报信息")
     
     # 初始化保存目录
@@ -200,7 +207,7 @@ if __name__ == "__main__":
     content_processed = os.path.join(processed_dir, "content_processed_ids.json")
 
     # 使用线程池并行处理
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=12) as executor:
         # 新增三个字典用于记录增量数据
         delta_filename = {}
         delta_headers = {}

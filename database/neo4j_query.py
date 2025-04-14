@@ -791,10 +791,108 @@ def query_content_under_header(header_id):
 
 
 
+def delete_file_node_and_relations(file_node_id):
+    """
+    删除指定file_node_id的File节点及其所有关联的节点和关系
+    
+    Args:
+        file_node_id: 要删除的文件节点ID
+    
+    Returns:
+        bool: 操作是否成功
+    """
+    driver = get_neo4j_driver()
+    
+    try:
+        with driver.session() as session:
+            # 首先检查节点是否存在
+            check_result = session.run(
+                """
+                MATCH (f:File {file_node_id: $file_node_id})
+                RETURN count(f) as count
+                """,
+                file_node_id=file_node_id
+            ).single()
+            
+            if not check_result or check_result["count"] == 0:
+                print(f"文件节点 {file_node_id} 不存在")
+                return False
+            
+            # 删除所有关联的节点和关系
+            result = session.run(
+                """
+                // 匹配文件节点及其所有关联节点
+                MATCH (f:File {file_node_id: $file_node_id})
+                
+                // 匹配并收集所有关联的Header节点
+                OPTIONAL MATCH (f)-[:HAS_HEADER]->(h:Header)
+                
+                // 匹配并收集所有关联的Content节点
+                OPTIONAL MATCH (h)-[:HAS_CONTENT]->(c:Content)
+                
+                // 匹配并收集所有关联的Image节点
+                OPTIONAL MATCH (f)-[:HAS_IMAGE]->(i:Image)
+                OPTIONAL MATCH (h)-[:HAS_IMAGE]->(i2:Image)
+                
+                // 匹配并收集所有关联的AllHeaders节点
+                OPTIONAL MATCH (f)-[:HAS_ALL_HEADERS]->(ah:AllHeaders)
+                
+                // 删除所有关联的节点和关系
+                DETACH DELETE f, h, c, i, i2, ah
+                
+                RETURN count(f) as deleted_files
+                """,
+                file_node_id=file_node_id
+            ).single()
+            
+            if result and result["deleted_files"] > 0:
+                print(f"成功删除文件节点 {file_node_id} 及其所有关联节点和关系")
+                return True
+            else:
+                print(f"删除文件节点 {file_node_id} 操作未能完成")
+                return False
+                
+    except Exception as e:
+        print(f"删除文件节点及关系时发生错误: {e}")
+        return False
+    finally:
+        driver.close()
 
-# 如果需要直接测试，取消下面的注释
-if __name__ == "__main__":
-    # result = query_file_contents(2969078)
+
+# # 如果需要直接测试，取消下面的注释
+# if __name__ == "__main__":
+#     # print(1)
+#     import pandas as pd
+#     df = pd.read_excel("/Users/linxuanxuan/PycharmProjects/C01_dev/data/25年研报列表.xlsx")
+#     # 循环遍历DataFrame中的id并删除对应的文件节点及关系
+#     print(f"开始批量删除文件节点，共 {len(df)} 条记录")
+#
+#     success_count = 0
+#     fail_count = 0
+#
+#     #简单循环遍历DataFrame中的每一行
+#     for index, row in df.iterrows():
+#         try:
+#             file_id = int(row['id'])
+#             print(f"正在处理第 {index+1}/{len(df)} 条记录，文件ID: {file_id}")
+#
+#             # 调用删除函数
+#             result = delete_file_node_and_relations(file_id)
+#
+#             # 统计成功和失败的数量
+#             if result:
+#                 success_count += 1
+#             else:
+#                 fail_count += 1
+#
+#         except Exception as e:
+#             print(f"处理文件ID时出错: {e}")
+#             fail_count += 1
+#
+#     print(f"批量删除完成，成功: {success_count}，失败: {fail_count}")
+    # result = delete_file_node_and_relations(4135645)
+    # print(result)
+    # result = query_file_contents(4135645)
     # print(result)
     # result = test_query_by_header(288229945581240343)
     # print(result)
@@ -804,4 +902,4 @@ if __name__ == "__main__":
 #     print(query_by_header("288007216793911321"))
     # header_id = 291627249210228851
     # print(query_file_node_by_header(header_id))
-    print(query_content_under_header(291580271302541329))
+    # print(query_content_under_header(291580271302541329))

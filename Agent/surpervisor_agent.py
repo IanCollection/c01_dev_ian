@@ -60,7 +60,7 @@ def judge_title_relevance(current_title: str, header_content: str) -> bool:
         
         # 调用Qwen-turbo模型进行判断
         completion = qwen_client.chat.completions.create(
-            model="qwen-long-latest",
+            model="qwen-plus-latest",
             messages=[
                 {"role": "system", "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
                 {"role": "user", "content": prompt}
@@ -118,7 +118,7 @@ def judge_topic_relevance(topic: str, header_content: str) -> bool:
         print(f"当前标题: {topic}")
         print(f"当前内容: {header_content}")
         completion = qwen_client.chat.completions.create(
-            model="qwen-long-latest",
+            model="qwen-plus-latest",
             messages=[
                 {"role": "system",
                  "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
@@ -175,7 +175,7 @@ def industry_indicator_relevance(industry_list: List[str], current_title: str) -
         
         # 调用Qwen-turbo模型进行判断
         completion = qwen_client.chat.completions.create(
-            model="qwen-long-latest",
+            model="qwen-plus-latest",
             messages=[
                 {"role": "system", "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
                 {"role": "user", "content": prompt}
@@ -201,3 +201,362 @@ def industry_indicator_relevance(industry_list: List[str], current_title: str) -
     except Exception as e:
         print(f"判断行业指标相关性时出错: {e}")
         return False
+
+
+def eco_indicator_relevance(eco_indicator_name, topic):
+    """
+    判断经济指标与当前标题是否相关
+    
+    参数:
+        eco_indicator_name (str): 经济指标名称
+        topic (str): 当前大标题
+        
+    返回:
+        bool: 是否相关
+    """
+    try:
+        # 构建提示词
+        prompt = f"""
+        请判断以下经济指标与标题是否相关:
+        
+        经济指标: {eco_indicator_name}
+        标题: {topic}
+    
+        要求:
+        1. 如果经济指标与标题在主题、关键词或核心内容上相关，返回1
+        2. 如果经济指标与标题完全不相关，返回0
+        3. 请严格按照JSON格式返回结果：{{"result": 1}}或{{"result": 0}}
+        4. 不要包含任何其他解释或文字
+        """
+        
+        # 调用Qwen-long模型进行判断
+        completion = qwen_client.chat.completions.create(
+            model="qwen-long-latest",
+            messages=[
+                {"role": "system", "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"}  # 强制要求JSON格式响应
+        )
+
+        # 获取原始响应并打印用于调试
+        raw_response = completion.choices[0].message.content
+        print(f"API原始响应: {raw_response}")
+
+        try:
+            # 尝试解析JSON响应
+            result = json.loads(raw_response)
+            return result.get("result", 0) == 1
+            
+        except json.JSONDecodeError as je:
+            print(f"JSON解析错误，原始响应: {raw_response}")
+            print(f"解析错误详情: {je}")
+            return False
+    
+    except Exception as e:
+        print(f"判断经济指标相关性时出错: {e}")
+        return False
+
+
+
+if __name__ == "__main__":
+    eco_indicators = [{
+
+
+                                            "id": 2140920,
+                                            "indic_id": 2100604878,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2016-12-31",
+                                            "data_value": 3326430.0,
+                                            "update_time": "2019-01-23 16:07:48",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2230313,
+                                            "indic_id": 2100604878,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2017-12-31",
+                                            "data_value": 4740360.0,
+                                            "update_time": "2019-05-22 14:01:47",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2458352,
+                                            "indic_id": 2100604878,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2018-12-31",
+                                            "data_value": 5336217.0,
+                                            "update_time": "2020-05-28 13:40:53",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 4604924,
+                                            "indic_id": 2100604878,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2019-12-31",
+                                            "data_value": 7605947.0,
+                                            "update_time": "2021-07-06 13:35:43",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2140927,
+                                            "indic_id": 2100604879,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2016-12-31",
+                                            "data_value": 3546738.0,
+                                            "update_time": "2019-01-23 16:07:48",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:能源控制软件"
+                                        },
+                                        {
+                                            "id": 2230314,
+                                            "indic_id": 2100604879,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2017-12-31",
+                                            "data_value": 4762151.0,
+                                            "update_time": "2019-05-22 14:01:47",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:能源控制软件"
+                                        },
+                                        {
+                                            "id": 2458353,
+                                            "indic_id": 2100604879,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2018-12-31",
+                                            "data_value": 4651863.0,
+                                            "update_time": "2020-05-28 13:40:53",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:能源控制软件"
+                                        },
+                                        {
+                                            "id": 4604943,
+                                            "indic_id": 2100604879,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2019-12-31",
+                                            "data_value": 6015119.0,
+                                            "update_time": "2021-07-06 13:35:43",
+                                            "name_cn": "软件产业:软件产品收入:应用软件:行业应用软件:能源控制软件"
+                                        },
+                                        {
+                                            "id": 2141439,
+                                            "indic_id": 2100604964,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2014-12-31",
+                                            "data_value": 448161.0,
+                                            "update_time": "2019-01-23 16:07:58",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:行驶系控制系统"
+                                        },
+                                        {
+                                            "id": 2141438,
+                                            "indic_id": 2100604964,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2015-12-31",
+                                            "data_value": 398623.0,
+                                            "update_time": "2019-01-23 16:07:58",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:行驶系控制系统"
+                                        },
+                                        {
+                                            "id": 2141437,
+                                            "indic_id": 2100604964,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2016-12-31",
+                                            "data_value": 488522.0,
+                                            "update_time": "2019-01-23 16:07:58",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:行驶系控制系统"
+                                        },
+                                        {
+                                            "id": 2230399,
+                                            "indic_id": 2100604964,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2017-12-31",
+                                            "data_value": 130057.0,
+                                            "update_time": "2019-05-22 14:01:49",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:行驶系控制系统"
+                                        },
+                                        {
+                                            "id": 2141445,
+                                            "indic_id": 2100604965,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2014-12-31",
+                                            "data_value": 2903299.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:车身控制系统"
+                                        },
+                                        {
+                                            "id": 2141444,
+                                            "indic_id": 2100604965,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2015-12-31",
+                                            "data_value": 3344438.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:车身控制系统"
+                                        },
+                                        {
+                                            "id": 2141443,
+                                            "indic_id": 2100604965,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2016-12-31",
+                                            "data_value": 4451979.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:车身控制系统"
+                                        },
+                                        {
+                                            "id": 2230400,
+                                            "indic_id": 2100604965,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2017-12-31",
+                                            "data_value": 2821736.0,
+                                            "update_time": "2019-05-22 14:01:49",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:汽车电子:车身控制系统"
+                                        },
+                                        {
+                                            "id": 2141457,
+                                            "indic_id": 2100604967,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2014-12-31",
+                                            "data_value": 426911.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通"
+                                        },
+                                        {
+                                            "id": 2141456,
+                                            "indic_id": 2100604967,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2015-12-31",
+                                            "data_value": 376984.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通"
+                                        },
+                                        {
+                                            "id": 2141455,
+                                            "indic_id": 2100604967,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2016-12-31",
+                                            "data_value": 145530.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通"
+                                        },
+                                        {
+                                            "id": 2230402,
+                                            "indic_id": 2100604967,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2017-12-31",
+                                            "data_value": 112078.0,
+                                            "update_time": "2019-05-22 14:01:49",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通"
+                                        },
+                                        {
+                                            "id": 2141463,
+                                            "indic_id": 2100604968,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2014-12-31",
+                                            "data_value": 426911.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通:交通信号控制机"
+                                        },
+                                        {
+                                            "id": 2141462,
+                                            "indic_id": 2100604968,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2015-12-31",
+                                            "data_value": 376984.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通:交通信号控制机"
+                                        },
+                                        {
+                                            "id": 2141461,
+                                            "indic_id": 2100604968,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2016-12-31",
+                                            "data_value": 145530.0,
+                                            "update_time": "2019-01-23 16:07:59",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通:交通信号控制机"
+                                        },
+                                        {
+                                            "id": 2230403,
+                                            "indic_id": 2100604968,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2017-12-31",
+                                            "data_value": 112078.0,
+                                            "update_time": "2019-05-22 14:01:49",
+                                            "name_cn": "软件产业:嵌入式系统软件收入:计算机应用产品:智能交通:交通信号控制机"
+                                        },
+                                        {
+                                            "id": 2263082,
+                                            "indic_id": 2100616512,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2010-12-31",
+                                            "data_value": 1899805.0,
+                                            "update_time": "2019-07-10 16:03:12",
+                                            "name_cn": "软件产业:内资企业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2262166,
+                                            "indic_id": 2100616512,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2011-12-31",
+                                            "data_value": 1698866.0,
+                                            "update_time": "2019-07-09 14:52:17",
+                                            "name_cn": "软件产业:内资企业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2261208,
+                                            "indic_id": 2100616512,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2012-12-31",
+                                            "data_value": 1642228.0,
+                                            "update_time": "2019-07-09 13:59:21",
+                                            "name_cn": "软件产业:内资企业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2260237,
+                                            "indic_id": 2100616512,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2013-12-31",
+                                            "data_value": 1755841.0,
+                                            "update_time": "2019-07-09 11:42:38",
+                                            "name_cn": "软件产业:内资企业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2256607,
+                                            "indic_id": 2100616512,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2016-12-31",
+                                            "data_value": 3059836.0,
+                                            "update_time": "2019-07-08 15:42:25",
+                                            "name_cn": "软件产业:内资企业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        },
+                                        {
+                                            "id": 2255315,
+                                            "indic_id": 2100616512,
+                                            "publish_date": "2025-03-29",
+                                            "period_date": "2017-12-31",
+                                            "data_value": 4203859.0,
+                                            "update_time": "2019-07-08 15:03:17",
+                                            "name_cn": "软件产业:内资企业:软件产品收入:应用软件:行业应用软件:交通运输行业软件"
+                                        }
+                                    ]
+    
+
+    topic = '2023年新能源汽车发展全景'
+    print(f"eco_indicators筛选前的长度: {len(eco_indicators)}")
+        # 使用并行方式筛选相关的经济指标
+    if eco_indicators:  # 检查列表是否为空
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # 创建future到indicator的映射
+            future_to_indicator = {
+                executor.submit(eco_indicator_relevance, indicator.get('name_cn', ''), topic): indicator
+                for indicator in eco_indicators
+            }
+            
+            # 收集相关指标
+            relevant_eco_indicators = []
+            for future in concurrent.futures.as_completed(future_to_indicator):
+                indicator = future_to_indicator[future] 
+                try:
+                    if future.result():  # 如果相关
+                        relevant_eco_indicators.append(indicator)
+                except Exception as e:
+                    print(f"处理经济指标 {indicator.get('name_cn', '')} 时出错: {e}")   
+        
+        eco_indicators = relevant_eco_indicators  # 重新赋值
+        print(f"筛选后的eco_indicators: {eco_indicators}")
+        print(f"筛选后的eco_indicators的长度: {len(eco_indicators)}")   

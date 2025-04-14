@@ -371,7 +371,9 @@ def overview_v3():
             final_overview, _ = overview_conclusion(reports_overview, general_overview[0], topic)
         else:
             final_overview, _ = overview_conclusion(reports_overview, general_overview, topic)
-        
+        print(f"===="*10)
+        print(f"完全目录：{final_overview}")
+        print(f"====" * 10)
         # 提取章节内容
         content_json = extract_headlines(final_overview)
         section_list = generate_section_list(content_json)
@@ -565,7 +567,7 @@ def search_api():
     query = data.get('query')  # 检索文本
     index_type = data.get('index_type', 'filename')  # 默认检索content向量库
     top_k = data.get('top_k', 10)  # 默认返回10条结果
-    
+
     # 调用search函数执行向量检索
     results = search(
         query=query,  # 检索文本

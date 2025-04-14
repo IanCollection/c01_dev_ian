@@ -312,7 +312,7 @@ def es_vector_query_eco_indicators(query_text, size=10, min_score=0.5):
         print(f"搜索出错: {str(e)}")
         return [], []
     
-def es_vector_query_eco_indicators_v2(query_text, year, size=10, min_score=0.5):
+def es_vector_query_eco_indicators_v2(query_text, year, size=10, min_score=0.75):
     """
     使用向量搜索查询经济数据
 
