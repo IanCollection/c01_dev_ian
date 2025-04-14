@@ -670,27 +670,27 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
 
 
         # #区域相关性判断
-        # final_policies_v3 = []
-        # with concurrent.futures.ThreadPoolExecutor() as executor:
-        #     # 提交所有判断任务，仅处理有policy_title的元素
-        #     futures = []
-        #     for policy in simplified_policies:  # Use temp var
-        #         if policy.get('policy_summary'):
-        #             print(f"政策摘要: {policy.get('policy_summary')}")  # 打印每个政策摘要
-        #             future = executor.submit(judge_area_topic_relevance, topic, policy.get('policy_title'),policy.get('org_name'))
-        #             futures.append((policy, future))
-        #     # 等待所有任务完成并处理结果
-        #     for policy, future in futures:
-        #         try:
-        #             if future.result():  # 如果返回True则保留
-        #                 final_policies_v3.append(policy)  # Append to new var
-        #         except Exception as e:
-        #             print(f"判断政策标题相关性时出错: {e}")
-        #
-        #     # 更新simplified_policies为最终过滤后的结果
-        #     simplified_policies = final_policies_v3  # Assign final result
-        # print(f"筛选后的政策数量为_v3{len(simplified_policies)}")
-        # print(f"筛选后的政策_v3:{simplified_policies}")
+        final_policies_v3 = []
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # 提交所有判断任务，仅处理有policy_title的元素
+            futures = []
+            for policy in simplified_policies:  # Use temp var
+                if policy.get('policy_summary'):
+                    # print(f"政策摘要: {policy.get('policy_summary')}")  # 打印每个政策摘要
+                    future = executor.submit(judge_area_topic_relevance, topic, policy.get('policy_title'),policy.get('org_name'))
+                    futures.append((policy, future))
+            # 等待所有任务完成并处理结果
+            for policy, future in futures:
+                try:
+                    if future.result():  # 如果返回True则保留
+                        final_policies_v3.append(policy)  # Append to new var
+                except Exception as e:
+                    print(f"判断政策标题相关性时出错: {e}")
+
+            # 更新simplified_policies为最终过滤后的结果
+            simplified_policies = final_policies_v3  # Assign final result
+        print(f"筛选后的政策数量为_v3{len(simplified_policies)}")
+        print(f"筛选后的政策_v3:{simplified_policies}")
 
 
         # 遍历simplified_policies，收集所有industry字段
@@ -826,6 +826,7 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
         eco_indicators_report = ""
 
         print(f"eco_indicators筛选前的长度: {len(eco_indicators)}")
+
         # 使用并行方式筛选相关的经济指标
         # if eco_indicators:  # 检查列表是否为空
         #     with concurrent.futures.ThreadPoolExecutor() as executor:

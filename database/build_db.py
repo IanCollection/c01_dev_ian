@@ -190,7 +190,7 @@ if __name__ == "__main__":
     # 读取研报信息
     logger.info("开始读取研报信息...")
     reports_info = pd.read_excel(excel_path)
-    reports_info = reports_info.iloc[:50]
+    reports_info = reports_info.iloc[25:100]
     logger.info(f"读取了{len(reports_info)}条研报信息")
     
     # 初始化保存目录

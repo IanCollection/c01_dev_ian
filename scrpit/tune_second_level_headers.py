@@ -87,10 +87,11 @@ def modify_second_title(second_level,topic = None):
     # print(f"优化后的二级标题: {modified_title}")
 
     title_code,modified_pure_title = code_title_spliter(modified_title)
-
+    print(f"title_code: {title_code}")
     # 更新二级标题，并保留原始标题
     second_level['previous_title'] = original_title
     second_level['title_code'] = title_code
+    print()
     second_level['title'] = modified_pure_title
     second_level['ana_instruction'] = ana_instruction
     return second_level

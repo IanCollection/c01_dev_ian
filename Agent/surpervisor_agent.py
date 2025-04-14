@@ -231,7 +231,7 @@ def eco_indicator_relevance(eco_indicator_name, topic):
         
         # 调用Qwen-long模型进行判断
         completion = qwen_client.chat.completions.create(
-            model="qwen-long-latest",
+            model="qwen-plus-latest",
             messages=[
                 {"role": "system", "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
                 {"role": "user", "content": prompt}
@@ -243,7 +243,6 @@ def eco_indicator_relevance(eco_indicator_name, topic):
         # 获取原始响应并打印用于调试
         raw_response = completion.choices[0].message.content
         print(f"API原始响应: {raw_response}")
-
         try:
             # 尝试解析JSON响应
             result = json.loads(raw_response)
