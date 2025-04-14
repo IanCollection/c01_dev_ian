@@ -38,6 +38,9 @@ def analyze_eco_indicators(data_list):
             first_value = valid_data['data_value'].iloc[0] if len(valid_data) > 0 else np.nan
             last_value = valid_data['data_value'].iloc[-1] if len(valid_data) > 0 else np.nan
             
+            # 获取单位
+            unit = valid_data['unit_cn'].iloc[0] if 'unit_cn' in valid_data.columns and len(valid_data) > 0 else ''
+            
             # 计算趋势
             if pd.notna(first_value) and pd.notna(last_value):
                 trend = '上升' if last_value > first_value else '下降'
@@ -53,6 +56,7 @@ def analyze_eco_indicators(data_list):
             # 计算基本统计量
             stats = {
                 '指标名称': name,
+                '单位': unit,
                 '数据时间范围': f"{valid_data['period_date'].min().strftime('%Y-%m-%d')} 至 {valid_data['period_date'].max().strftime('%Y-%m-%d')}",
                 '数据点数量': len(valid_data),
                 '最新值': float(last_value),
@@ -92,12 +96,12 @@ def generate_summary_report(analysis_results):
     for stats in analysis_results:
         summary_parts.append(f"\n### {stats['指标名称']}")
         summary_parts.append(f"- 数据期间：{stats['数据时间范围']}")
-        summary_parts.append(f"- 最新数据：{stats['最新值']:.2f}")
-        summary_parts.append(f"- 平均值：{stats['平均值']:.2f}")
-        summary_parts.append(f"- 变化范围：{stats['最小值']:.2f} 至 {stats['最大值']:.2f}")
+        summary_parts.append(f"- 最新数据：{stats['最新值']:.2f} {stats['单位']}")
+        summary_parts.append(f"- 平均值：{stats['平均值']:.2f} {stats['单位']}")
+        summary_parts.append(f"- 变化范围：{stats['最小值']:.2f} 至 {stats['最大值']:.2f} {stats['单位']}")
         summary_parts.append(f"- 年均增长率：{stats['年均增长率']:.2f}%")
         summary_parts.append(f"- 整体趋势：{stats['变化趋势']}")
-        summary_parts.append(f"- 波动情况：标准差 {stats['标准差']:.2f}")
+        summary_parts.append(f"- 波动情况：标准差 {stats['标准差']:.2f} {stats['单位']}")
 
     return "\n".join(summary_parts)
 

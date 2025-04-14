@@ -459,27 +459,51 @@ if __name__ == "__main__":
     # # 加载filename索引并打印维度
     try:
         base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "faiss_index_sc")
+        
+        # 文件名索引
         filename_index_path = os.path.join(base_path, "filename_index_flat.index")
         filename_ids_path = os.path.join(base_path, "filename_index_flat_ids.json")
+        
+        # 标题索引
+        header_index_path = os.path.join(base_path, "header_index_IVFPQ.index")
+        header_ids_path = os.path.join(base_path, "header_ids.npy")
+        
+        # 内容索引
+        content_index_path = os.path.join(base_path, "content_index_IVFPQ.index")
+        content_ids_path = os.path.join(base_path, "content_ids.npy")
 
+        # 加载文件名索引
         print("正在加载filename索引...")
         filename_index = faiss.read_index(filename_index_path)
-
-        # 获取并打印索引维度
-        dimension = filename_index.d
-        print(f"filename索引维度: {dimension}")
-
-        # 打印索引类型和向量总数
-        print(f"索引类型: {type(filename_index).__name__}")
-        print(f"向量总数: {filename_index.ntotal}")
-
-        # 加载并打印IDs
+        print(f"filename索引维度: {filename_index.d}")
+        print(f"filename索引类型: {type(filename_index).__name__}")
+        print(f"filename向量总数: {filename_index.ntotal}")
         with open(filename_ids_path, 'r', encoding='utf-8') as f:
-            ids = json.load(f)
-        print(f"IDs数量: {len(ids)}")
-        print(f"IDs示例: {ids[:5] if len(ids) > 5 else ids}")
+            filename_ids = json.load(f)
+        print(f"filename IDs数量: {len(filename_ids)}")
+        print(f"filename IDs示例: {filename_ids[:5] if len(filename_ids) > 5 else filename_ids}")
+        
+        # 加载标题索引
+        print("\n正在加载header索引...")
+        header_index = faiss.read_index(header_index_path)
+        print(f"header索引维度: {header_index.d}")
+        print(f"header索引类型: {type(header_index).__name__}")
+        print(f"header向量总数: {header_index.ntotal}")
+        header_ids = np.load(header_ids_path)
+        print(f"header IDs数量: {len(header_ids)}")
+        print(f"header IDs示例: {header_ids[:5] if len(header_ids) > 5 else header_ids}")
+        
+        # 加载内容索引
+        print("\n正在加载content索引...")
+        content_index = faiss.read_index(content_index_path)
+        print(f"content索引维度: {content_index.d}")
+        print(f"content索引类型: {type(content_index).__name__}")
+        print(f"content向量总数: {content_index.ntotal}")
+        content_ids = np.load(content_ids_path)
+        print(f"content IDs数量: {len(content_ids)}")
+        print(f"content IDs示例: {content_ids[:5] if len(content_ids) > 5 else content_ids}")
     except Exception as e:
-        print(f"加载filename索引失败: {e}")
+        print(f"加载索引失败: {e}")
 
 
 

@@ -859,37 +859,37 @@ def delete_file_node_and_relations(file_node_id):
         driver.close()
 
 
-# # 如果需要直接测试，取消下面的注释
-# if __name__ == "__main__":
-#     # print(1)
-#     import pandas as pd
-#     df = pd.read_excel("/Users/linxuanxuan/PycharmProjects/C01_dev/data/25年研报列表.xlsx")
-#     # 循环遍历DataFrame中的id并删除对应的文件节点及关系
-#     print(f"开始批量删除文件节点，共 {len(df)} 条记录")
-#
-#     success_count = 0
-#     fail_count = 0
-#
-#     #简单循环遍历DataFrame中的每一行
-#     for index, row in df.iterrows():
-#         try:
-#             file_id = int(row['id'])
-#             print(f"正在处理第 {index+1}/{len(df)} 条记录，文件ID: {file_id}")
-#
-#             # 调用删除函数
-#             result = delete_file_node_and_relations(file_id)
-#
-#             # 统计成功和失败的数量
-#             if result:
-#                 success_count += 1
-#             else:
-#                 fail_count += 1
-#
-#         except Exception as e:
-#             print(f"处理文件ID时出错: {e}")
-#             fail_count += 1
-#
-#     print(f"批量删除完成，成功: {success_count}，失败: {fail_count}")
+# 如果需要直接测试，取消下面的注释
+if __name__ == "__main__":
+    # print(1)
+    import pandas as pd
+    df = pd.read_excel("/Users/linxuanxuan/PycharmProjects/C01_dev/data/25年研报列表.xlsx")
+    # 循环遍历DataFrame中的id并删除对应的文件节点及关系
+    print(f"开始批量删除文件节点，共 {len(df)} 条记录")
+
+    success_count = 0
+    fail_count = 0
+
+    #简单循环遍历DataFrame中的每一行
+    for index, row in df.iterrows():
+        try:
+            file_id = int(row['id'])
+            print(f"正在处理第 {index+1}/{len(df)} 条记录，文件ID: {file_id}")
+
+            # 调用删除函数
+            result = delete_file_node_and_relations(file_id)
+
+            # 统计成功和失败的数量
+            if result:
+                success_count += 1
+            else:
+                fail_count += 1
+
+        except Exception as e:
+            print(f"处理文件ID时出错: {e}")
+            fail_count += 1
+
+    print(f"批量删除完成，成功: {success_count}，失败: {fail_count}")
     # result = delete_file_node_and_relations(4135645)
     # print(result)
     # result = query_file_contents(4135645)
@@ -897,6 +897,9 @@ def delete_file_node_and_relations(file_node_id):
     # result = test_query_by_header(288229945581240343)
     # print(result)
     # query_file_contents_diyid(2969078)
+
+
+
 # if __name__ == "__main__":
 #     # test_relationships()
 #     print(query_by_header("288007216793911321"))

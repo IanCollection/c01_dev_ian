@@ -10,7 +10,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)  # 假设当前文件在项目根目录的子目录中
 sys.path.append(project_root)
 from Agent.surpervisor_agent import judge_title_relevance, industry_indicator_relevance, judge_topic_relevance, \
-    eco_indicator_relevance
+    eco_indicator_relevance, judge_area_topic_relevance
 # 现在可以导入项目模块
 from database.query_ic_indicators import get_cics_id_by_name, query_ic_trend_score, query_ic_current_rating
 from scrpit.analyze_ic_trend_score import analyze_industry_trends, get_analysis_summary
@@ -498,7 +498,7 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
 
         potential_ic_trend_labels = get_potential_ic_trend_labels(query_text)
         # top_k = 10
-        report_query_response_raw = search_and_query(query_text, index_type='header',top_k=3) # Assign to temp var
+        report_query_response_raw = search_and_query(query_text, index_type='header',top_k=5) # Assign to temp var
         # print(report_query_response_raw)
         # 确保report_query_response_raw不为None
         # print(len(report_query_response_raw))
@@ -669,6 +669,30 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
         print(f"筛选后的政策_v2:{simplified_policies}")
 
 
+        # #区域相关性判断
+        # final_policies_v3 = []
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     # 提交所有判断任务，仅处理有policy_title的元素
+        #     futures = []
+        #     for policy in simplified_policies:  # Use temp var
+        #         if policy.get('policy_summary'):
+        #             print(f"政策摘要: {policy.get('policy_summary')}")  # 打印每个政策摘要
+        #             future = executor.submit(judge_area_topic_relevance, topic, policy.get('policy_title'),policy.get('org_name'))
+        #             futures.append((policy, future))
+        #     # 等待所有任务完成并处理结果
+        #     for policy, future in futures:
+        #         try:
+        #             if future.result():  # 如果返回True则保留
+        #                 final_policies_v3.append(policy)  # Append to new var
+        #         except Exception as e:
+        #             print(f"判断政策标题相关性时出错: {e}")
+        #
+        #     # 更新simplified_policies为最终过滤后的结果
+        #     simplified_policies = final_policies_v3  # Assign final result
+        # print(f"筛选后的政策数量为_v3{len(simplified_policies)}")
+        # print(f"筛选后的政策_v3:{simplified_policies}")
+
+
         # 遍历simplified_policies，收集所有industry字段
         for policy in simplified_policies: # Use final policies list
             if policy.get('industry'):
@@ -801,31 +825,55 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
         # Reset eco_indicators_report before assignment
         eco_indicators_report = ""
 
-
         print(f"eco_indicators筛选前的长度: {len(eco_indicators)}")
         # 使用并行方式筛选相关的经济指标
+        # if eco_indicators:  # 检查列表是否为空
+        #     with concurrent.futures.ThreadPoolExecutor() as executor:
+        #         # 创建future到indicator的映射
+        #         future_to_indicator = {
+        #             executor.submit(eco_indicator_relevance, indicator.get('name_cn', ''), topic): indicator
+        #             for indicator in eco_indicators
+        #         }
+        #
+        #         # 收集相关指标
+        #         relevant_eco_indicators = []
+        #         for future in concurrent.futures.as_completed(future_to_indicator):
+        #             indicator = future_to_indicator[future]
+        #             try:
+        #                 if future.result():  # 如果相关
+        #                     relevant_eco_indicators.append(indicator)
+        #             except Exception as e:
+        #                 print(f"处理经济指标 {indicator.get('name_cn', '')} 时出错: {e}")
+        #
+        #     eco_indicators = relevant_eco_indicators  # 重新赋值
+        #     print(f"筛选后的eco_indicators: {eco_indicators}")
+        #     print(f"筛选后的eco_indicators的长度: {len(eco_indicators)}")
+
+
+        #判断indicator是否和当前的三级标题相关
         if eco_indicators:  # 检查列表是否为空
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 # 创建future到indicator的映射
                 future_to_indicator = {
-                    executor.submit(eco_indicator_relevance, indicator.get('name_cn', ''), topic): indicator
+                    executor.submit(eco_indicator_relevance, indicator.get('name_cn', ''), current_title): indicator
                     for indicator in eco_indicators
                 }
-                
+
                 # 收集相关指标
                 relevant_eco_indicators = []
                 for future in concurrent.futures.as_completed(future_to_indicator):
-                    indicator = future_to_indicator[future] 
+                    indicator = future_to_indicator[future]
                     try:
                         if future.result():  # 如果相关
                             relevant_eco_indicators.append(indicator)
                     except Exception as e:
-                        print(f"处理经济指标 {indicator.get('name_cn', '')} 时出错: {e}")   
-            
+                        print(f"处理经济指标 {indicator.get('name_cn', '')} 时出错: {e}")
+
             eco_indicators = relevant_eco_indicators  # 重新赋值
             print(f"筛选后的eco_indicators: {eco_indicators}")
-            print(f"筛选后的eco_indicators的长度: {len(eco_indicators)}")   
+            print(f"筛选后的eco_indicators的长度: {len(eco_indicators)}")
 
+            # 加一个 一二三级研报标题和指标进行筛选
 
 
         if eco_indicators: # Check if list is not empty

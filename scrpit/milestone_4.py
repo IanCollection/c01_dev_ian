@@ -167,6 +167,10 @@ def process_third_level_title(first_level_title, second_level_title, third_level
 
         try:
             current_new_title, _, _ = tuning_third_heading(tuning_reference, instruction, third_level_section['title'],topic)
+
+            # 分析思路也需要refine
+            # currrent_ana_instruntion = generate_ana_instruction_for_third_headers_after_query(third_level_section['title'], reference)
+
             current_new_title_code, current_new_pure_title = code_title_spliter(current_new_title)
 
         except Exception as tuning_error:

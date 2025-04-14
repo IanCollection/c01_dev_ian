@@ -312,7 +312,7 @@ def es_vector_query_eco_indicators(query_text, size=10, min_score=0.5):
         print(f"搜索出错: {str(e)}")
         return [], []
     
-def es_vector_query_eco_indicators_v2(query_text, year, size=10, min_score=0.75):
+def es_vector_query_eco_indicators_v2(query_text, year, size=25, min_score=0.5):
     """
     使用向量搜索查询经济数据
 
@@ -340,18 +340,20 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=10, min_score=0.75)
             vector_field=vector_field,
             size=size * 2  # 获取更多结果以便后续过滤
         )
-
         # 过滤低分结果并按分数排序
         filtered_results = [hit for hit in results if hit['_score'] >= min_score]
         sorted_results = sorted(filtered_results, key=lambda x: x['_score'], reverse=True)
 
-        # 提取所有INDIC_ID和对应的name_cn
-        indic_id_name_map = {
-            hit['_source'].get('indic_id', ''): hit['_source'].get('name_cn', '')
+        # 提取所有INDIC_ID和对应的name_cn以及unit_cn
+        indic_id_info_map = {
+            hit['_source'].get('indic_id', ''): {
+                'name_cn': hit['_source'].get('name_cn', ''),
+                'unit_cn': hit['_source'].get('unit_cn', '')
+            }
             for hit in sorted_results[:size]
             if hit['_source'].get('indic_id', '')
         }
-        indic_ids = list(indic_id_name_map.keys())
+        indic_ids = list(indic_id_info_map.keys())
 
         # 如果没有获取到INDIC_ID，直接返回空列表
         if not indic_ids:
@@ -400,6 +402,8 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=10, min_score=0.75)
             
             # 使用已获取的rows数据
             for row in rows:
+                # print(row)
+                print('\n')
                 # 将结果转换为字典
                 result_dict = dict(zip(columns, row))
                 # 处理特殊类型数据
@@ -415,14 +419,14 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=10, min_score=0.75)
                     except (ValueError, TypeError):
                         result_dict['data_value'] = None
 
-                # 添加name_cn字段
+                # 添加name_cn和unit_cn字段
+                indic_id = result_dict['indic_id']
+                result_dict['name_cn'] = indic_id_info_map.get(indic_id, {}).get('name_cn', '')
+                result_dict['unit_cn'] = indic_id_info_map.get(indic_id, {}).get('unit_cn', '')
+                
                 # 如果name_cn包含[停]则跳过该结果
-                # if '[停]' in indic_id_name_map.get(result_dict['indic_id'], ''):
-                #     continue
-                result_dict['name_cn'] = indic_id_name_map.get(result_dict['indic_id'], '')
                 if '[停]' in result_dict['name_cn']:
                     continue
-
 
                 result_list.append(result_dict)
             # print(f"result_list : {result_list}")
@@ -493,6 +497,7 @@ def process_indicators(result_list):
             indicator_info[indic_id] = {
                 'indicId': indic_id,
                 'title': item['name_cn'],
+                'unit': item.get('unit_cn', ''),
                 'dates': set()  # 使用集合来存储唯一日期
             }
         
@@ -506,6 +511,7 @@ def process_indicators(result_list):
             result.append({
                 'indicId': info['indicId'],
                 'title': info['title'],
+                'unit': info['unit'],
                 'periodDateStart': min(info['dates']),  # 获取最早日期
                 'periodDateEnd': max(info['dates'])     # 获取最晚日期
             })
@@ -513,34 +519,33 @@ def process_indicators(result_list):
     return result
 
 
-
 if __name__ == "__main__":
 
     # 连接数据库
-    connection, cursor = connect_to_deloitte_db()
-    if connection and cursor:
-        try:
-            # 查询sc_policy_detail表的总行数
-            cursor.execute("SELECT COUNT(*) FROM sc_policy_detail")
-            total_rows = cursor.fetchone()[0]
-            print(f"sc_policy_detail表总行数: {total_rows}")
-            
-        except Exception as e:
-            print(f"查询sc_policy_detail表总行数时出错: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if connection:
-                connection.close()
+    # connection, cursor = connect_to_deloitte_db()
+    # if connection and cursor:
+    #     try:
+    #         # 查询sc_policy_detail表的总行数
+    #         cursor.execute("SELECT COUNT(*) FROM sc_policy_detail")
+    #         total_rows = cursor.fetchone()[0]
+    #         print(f"sc_policy_detail表总行数: {total_rows}")
+    #
+    #     except Exception as e:
+    #         print(f"查询sc_policy_detail表总行数时出错: {str(e)}")
+    #     finally:
+    #         if cursor:
+    #             cursor.close()
+    #         if connection:
+    #             connection.close()
 
 
     # 测试查询函数
 
-    # query_text = "2023年新能源"
-    # result_list, indic_ids, indicator_info_summary = es_vector_query_eco_indicators_v2(query_text, 2024)
-    # print(result_list)
-    # print(indic_ids)
-    # print(indicator_info_summary)
+    query_text = "2023年新能源"
+    result_list, indic_ids, indicator_info_summary = es_vector_query_eco_indicators_v2(query_text, 2024)
+    print(result_list)
+    print(indic_ids)
+    print(indicator_info_summary)
 
 
     # # 连接数据库
