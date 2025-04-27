@@ -147,7 +147,8 @@ def query_ic_trend_score(cics_ids, year: Union[str, List[str]]) -> List[dict]:
             SELECT ts.*, c.name AS cics_name 
             FROM ic_trend_scores ts
             JOIN ic_cics c ON ts.cics_id = c.id
-            WHERE ts.cics_id IN ({placeholders}) 
+            WHERE ts.cics_id IN ({placeholders})
+            AND EXTRACT(YEAR FROM ts.date) = {year}
         """
         
         # 执行查询

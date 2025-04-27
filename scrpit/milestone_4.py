@@ -32,6 +32,8 @@ class DateTimeEncoder(json.JSONEncoder):
             return float(obj)
         return super().default(obj)
 
+
+
 # 一级标题处理函数
 def process_first_level_title(first_level_section, index, topic = None):
     start_time = time.time()
@@ -85,6 +87,116 @@ def process_second_level_title(first_level_title, second_level_section,topic = N
                     print(f"处理三级标题时出错: {str(e)}")
 
     return new_second_level
+
+
+def process_first_level_title_no_refine(first_level_section, index, topic = None):
+    start_time = time.time()
+    print(f"正在调用process_first_level_title,当前处理的主题是: {topic}")
+    first_level_title = first_level_section["title"]
+    print(f"开始处理第 {index + 1} 个一级标题: {first_level_title}")
+
+    new_first_level = {
+        "title": first_level_title,
+        "subsections": []
+    }
+
+    # 使用线程池处理二级标题
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_second_level_title_norefine, first_level_title, sec, topic)
+                  for sec in first_level_section["subsections"]]
+        
+        for future in as_completed(futures):
+            try:
+                if (new_second_level := future.result()):
+                    new_first_level["subsections"].append(new_second_level)
+            except Exception as e:
+                print(f"处理二级标题时出错: {str(e)}")
+
+    print(f"完成第 {index + 1} 个一级标题: {first_level_title} (耗时: {time.time() - start_time:.2f}秒)")
+    return index, new_first_level
+
+# 二级标题处理函数
+def process_second_level_title_norefine(first_level_title, second_level_section,topic = None):
+    print(f"正在调用process_second_level_title,当前处理的主题是: {topic}")
+    new_second_level = {
+        "title": second_level_section["title"],
+        "subsections": []
+    }
+
+    if not second_level_section.get("subsections"):
+        print(f"警告：{first_level_title} - {second_level_section['title']} 没有三级标题，将创建默认节点")
+        new_second_level["subsections"].append(
+            process_third_level_title_norefine(first_level_title, second_level_section["title"], {"title": "默认内容"}, instruction=None, topic=topic)
+        )
+    else:
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_third_level_title_norefine, first_level_title, second_level_section["title"], sec, None, topic)
+                      for sec in second_level_section["subsections"]]
+            
+            for future in as_completed(futures):
+                try:
+                    if (new_third_level := future.result()):
+                        new_second_level["subsections"].append(new_third_level)
+                except Exception as e:
+                    print(f"处理三级标题时出错: {str(e)}")
+
+    return new_second_level
+
+
+# 三级标题处理函数
+def process_third_level_title_norefine(first_level_title, second_level_title, third_level_section,instruction = None,topic = None):
+    try:
+        # 修改日志标签以便区分
+        print(f"[process_third_level_title ENTRY] Received topic: {topic}") 
+        if not isinstance(third_level_section, dict) or 'title' not in third_level_section:
+            print(f"无效的三级标题数据格式: {third_level_section}")
+            return create_default_third_level()
+
+        combined_title = f"{first_level_title} - {second_level_title} - {third_level_section['title']}"
+        # year = 2023
+        year = year_extract_from_title(combined_title)
+        try:
+            # 添加调用前日志
+            print(f"[process_third_level_title PRE-CALL] Calling query_relative_data_v3 with topic: {topic}, instruction: {instruction}") 
+            reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators,eco_indicators_sum,eco_indicators_report, analysis_results_ictrend_v2,filtered_result_ic_current_rating= query_relative_data_v3(year, combined_title,instruction,topic)
+            print(f"writing_instruction: {writing_instruction}")
+
+        except Exception as query_error:
+            print(f"查询数据时出错 {combined_title}: {str(query_error)}")
+            return create_error_third_level(third_level_section)
+        print(f'ic_trends_mile_stone4:{ic_trends}')
+        instruction = writing_instruction or "无具体写作指导"
+        reference = {
+            "report_source": reports if isinstance(reports, list) else [],
+            "policy_source": policy if isinstance(policy, list) else [],
+            "industry_indicator_part_1": ic_trends if ic_trends else "",
+            "industry_indicator_part_1_analysis":analysis_results_ictrend_v2,
+            "industry_indicator_part_2": ic_current,
+            "industry_indicator_part_2_analysis":filtered_result_ic_current_rating,
+            "indicators": eco_indicators,
+            "indicators_sum": eco_indicators_sum,
+            "indicators_report":eco_indicators_report
+        }
+        try:
+            current_new_title_code, current_new_pure_title = code_title_spliter(third_level_section['title'])
+            print(f'current_new_title_code: {current_new_title_code}')
+        except Exception as tuning_error:
+            print(f"调整标题时出错 {third_level_section['title']}: {str(tuning_error)}")
+            current_new_title = third_level_section['title']
+
+        return {
+            'title_code':current_new_title_code,
+            "title": current_new_pure_title,
+            "previous_title": third_level_section['title'],
+            "relative_data": {
+                "writing_instructions": instruction,
+                "reference": reference
+            }
+        }
+    except Exception as e:
+        print(f"处理 {first_level_title} - {second_level_title} - {str(third_level_section)} 时出错: {str(e)}")
+        return create_error_third_level(third_level_section)
+
 
 
 def process_second_level_title_for_edit(first_level_title, second_level_section, topic = None):
@@ -226,6 +338,120 @@ def process_ic_trends(ic_trends):
     if isinstance(ic_trends, dict) and "overall_analysis" in ic_trends:
         return ic_trends["overall_analysis"]
     return ic_trends if isinstance(ic_trends, str) else "无相关数据"
+
+def process_first_level_title_serial(first_level_section, index, topic=None):
+    """串行版本的一级标题处理函数，顺序处理所有二级标题，不使用线程池"""
+    start_time = time.time()
+    print(f"[Serial] 正在处理第 {index + 1} 个一级标题: {first_level_section['title']}，主题: {topic}")
+
+    first_level_title = first_level_section["title"]
+    new_first_level = {
+        "title": first_level_title,
+        "subsections": []
+    }
+
+    # 顺序处理二级标题，不使用线程池
+    if "subsections" in first_level_section:
+        for sec in first_level_section["subsections"]:
+            try:
+                new_second_level = process_second_level_title_serial(first_level_title, sec, topic)
+                if new_second_level:
+                    new_first_level["subsections"].append(new_second_level)
+            except Exception as e:
+                print(f"[Serial] 处理二级标题时出错: {str(e)}")
+
+    print(f"[Serial] 完成第 {index + 1} 个一级标题: {first_level_title} (耗时: {time.time() - start_time:.2f}秒)")
+    return index, new_first_level
+
+
+def process_second_level_title_serial(first_level_title, second_level_section, topic=None):
+    """串行版本的二级标题处理函数，顺序处理所有三级标题，不使用线程池"""
+    start_time = time.time()
+    second_level_title = second_level_section["title"]
+    print(f"[Serial] 正在处理二级标题: {second_level_title}，主题: {topic}")
+
+    new_second_level = {
+        "title": second_level_title,
+        "subsections": []
+    }
+
+    if not second_level_section.get("subsections"):
+        print(f"[Serial] 警告：{first_level_title} - {second_level_title} 没有三级标题，将创建默认节点")
+        new_second_level["subsections"].append(
+            process_third_level_title(first_level_title, second_level_title, {"title": "默认内容"}, instruction=None, topic=topic)
+        )
+    else:
+        # 顺序处理三级标题，不使用线程池
+        for sec in second_level_section["subsections"]:
+            try:
+                new_third_level = process_third_level_title(first_level_title, second_level_title, sec, None, topic)
+                if new_third_level:
+                    new_second_level["subsections"].append(new_third_level)
+            except Exception as e:
+                print(f"[Serial] 处理三级标题时出错: {str(e)}")
+
+    print(f"[Serial] 完成二级标题: {second_level_title} (耗时: {time.time() - start_time:.2f}秒)")
+    return new_second_level
+
+
+def process_second_level_title_for_edit_serial(first_level_title, second_level_section, topic=None):
+    """串行版本的二级标题编辑函数，用于编辑模式下的二级标题处理"""
+    start_time = time.time()
+    second_level_title = second_level_section["title"]
+    print(f"[Serial-Edit] 正在处理二级标题: {second_level_title}，主题: {topic}")
+
+    new_second_level = {
+        "title": second_level_title,
+        "subsections": [],
+    }
+
+    if not second_level_section.get("subsections"):
+        print(f"[Serial-Edit] 警告：{first_level_title} - {second_level_title} 没有三级标题，将创建默认节点")
+        new_second_level["subsections"].append(
+            process_third_level_title(first_level_title, second_level_title, {"title": "默认内容"}, None, topic)
+        )
+    else:
+        # 顺序处理三级标题
+        for sec in second_level_section["subsections"]:
+            try:
+                new_third_level = process_third_level_title(first_level_title, second_level_title, sec, None, topic)
+                if new_third_level:
+                    new_second_level["subsections"].append(new_third_level)
+            except Exception as e:
+                print(f"[Serial-Edit] 处理三级标题时出错: {str(e)}")
+
+    print(f"[Serial-Edit] 完成二级标题: {second_level_title} (耗时: {time.time() - start_time:.2f}秒)")
+    return new_second_level
+
+
+# 示例：使用串行处理流程
+def process_section_tree_serial(section_list, topic=None):
+    """串行处理整个章节树结构，包括一级、二级和三级标题"""
+    start_time = time.time()
+    print(f"[Serial] 开始串行处理章节，共 {len(section_list)} 个一级标题，主题: {topic}")
+    
+    full_section_list = []
+    
+    for i, section in enumerate(section_list):
+        try:
+            print(f"[Serial] 处理一级标题 {i+1}/{len(section_list)}: {section.get('title', 'N/A')}")
+            index, processed_first_level = process_first_level_title_serial(section, i, topic)
+            
+            # 调整二级标题
+            print(f"[Serial] 调整二级标题 {processed_first_level.get('title', 'N/A')}")
+            modified_content_second_headings = modify_second_level_headers_stream(processed_first_level, topic)
+            
+            # 调整一级标题
+            print(f"[Serial] 调整一级标题 {processed_first_level.get('title', 'N/A')}")
+            modified_content = modify_first_level_headers_stream(modified_content_second_headings, topic)
+            
+            full_section_list.append(modified_content)
+            print(f"[Serial] 完成一级标题 {i+1}: {section.get('title', 'N/A')}")
+        except Exception as e:
+            print(f"[Serial] 处理一级标题时出错: {str(e)}")
+    
+    print(f"[Serial] 完成串行处理所有章节，共 {len(full_section_list)} 个结果 (总耗时: {time.time() - start_time:.2f}秒)")
+    return full_section_list
 
 if __name__ == "__main__":
     input_title = "中国新能源汽车产业可持续发展报告2023"

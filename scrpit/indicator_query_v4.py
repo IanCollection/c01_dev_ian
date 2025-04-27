@@ -405,7 +405,7 @@ def get_policy_details_by_ids(policy_ids,time = None):
         # 构建IN查询
         placeholders = ','.join(['%s'] * len(unique_policy_ids))
         sql = f"""
-            SELECT DISTINCT a.id, a.title, a.policy_summary, b.content, c.industry, a.policy_start_date,a.policy_end_date, b.org_name,b.publish_at
+            SELECT DISTINCT a.id, a.title, a.policy_summary, b.content, c.industry, a.policy_start_date,a.policy_end_date, b.org_name,b.publish_at,c.involved_region
             FROM sc_policy_detail a
             LEFT JOIN dq_policy_data b ON a.id = b.id
             LEFT JOIN sc_policy_relation c ON a.id = c.id
@@ -426,7 +426,8 @@ def get_policy_details_by_ids(policy_ids,time = None):
                 "policy_start_date": result[5],
                 "policy_end_date": result[6],
                 "org_name":result[7],
-                "publish_at":result[8]
+                "publish_at":result[8],
+                "involved_region":result[9]
             }
             policy_details_dict[result[0]] = policy_detail
 

@@ -112,7 +112,7 @@ def es_vector_query(query_text, table_name="sc_policy_detail", vector_field="tit
         return []
 
 
-def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.85, use_multi_fields=True):
+def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.8, use_multi_fields=True):
     """
     执行混合搜索查询
     
@@ -188,8 +188,10 @@ def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vecto
                         'title': source.get('title', ''),
                         'involved_industry_chain': source.get('involved_industry_chain', ''),
                         'policy_summary': source.get('policy_summary', ''),
-                        'org_name': org_name  # 添加查询到的org_name
+                        'involved_region': source.get('involved_region', ''),  # 添加 involved_region 字段
+                        'org_name': org_name
                     }
+                    # print(f"194_involved_region:{source.get('involved_region', '')}")
                     result_list.append(filtered_hit)
             except Exception as db_error:
                 print(f"数据库查询错误: {str(db_error)}")
@@ -205,7 +207,8 @@ def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vecto
                     'title': source.get('title', ''),
                     'involved_industry_chain': source.get('involved_industry_chain', ''),
                     'policy_summary': source.get('policy_summary', ''),
-                    'org_name': ''  # 数据库连接失败时返回空字符串
+                    'involved_region': source.get('involved_region', ''),  # 添加 involved_region 字段
+                    'org_name': ''
                 }
                 result_list.append(filtered_hit)
         
@@ -312,7 +315,7 @@ def es_vector_query_eco_indicators(query_text, size=10, min_score=0.5):
         print(f"搜索出错: {str(e)}")
         return [], []
     
-def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.7):
+def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
     """
     使用向量搜索查询经济数据
 
@@ -382,14 +385,18 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.7):
             
             # 处理year参数，确保是字符串类型
             year_str = str(year[0]) if year and isinstance(year, (list, tuple)) else current_year
-            
+
+
+
             # 使用to_char函数将period_date转换为字符串进行比较
-            # year_conditions = f"to_char(period_date, 'YYYY') = '{year_str}'"
+            year_conditions = f"to_char(period_date, 'YYYY') = '{year_str}'"
             
             # 查询unified_eco_data_view
-            sql = (f"SELECT * FROM unified_eco_data_view WHERE indic_id IN ({indic_ids_str}) limit 30"
-                   # f"AND {year_conditions}"
-                   )
+            sql = (f"SELECT * FROM unified_eco_data_view "
+                f"WHERE indic_id IN ({indic_ids_str}) "
+                f"AND {year_conditions} "
+                f"LIMIT 30"
+            )
             # print("执行的SQL查询:", sql)  # 添加SQL打印
             cursor.execute(sql)
             
@@ -498,11 +505,15 @@ def process_indicators(result_list):
                 'indicId': indic_id,
                 'title': item['name_cn'],
                 'unit': item.get('unit_cn', ''),
-                'dates': set()  # 使用集合来存储唯一日期
+                'dates': set(),  # 使用集合来存储唯一日期
+                'count': 0  # 初始化数据点计数
             }
         
         if period_date:
             indicator_info[indic_id]['dates'].add(period_date)
+        
+        # 增加数据点计数
+        indicator_info[indic_id]['count'] += 1
     
     # 转换为最终格式
     result = []
@@ -513,7 +524,8 @@ def process_indicators(result_list):
                 'title': info['title'],
                 'unit': info['unit'],
                 'periodDateStart': min(info['dates']),  # 获取最早日期
-                'periodDateEnd': max(info['dates'])     # 获取最晚日期
+                'periodDateEnd': max(info['dates']),    # 获取最晚日期
+                'num': info['count']  # 添加数据点个数字段
             })
     
     return result
@@ -541,7 +553,7 @@ if __name__ == "__main__":
 
     # 测试查询函数
 
-    query_text = "2023年新能源"
+    query_text = "1.白酒行业国际市场发展启示 政策与市场驱动家，白酒出口机遇与挑战并存"
     result_list, indic_ids, indicator_info_summary = es_vector_query_eco_indicators_v2(query_text, 2024)
     print(result_list)
     print(indic_ids)

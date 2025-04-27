@@ -98,7 +98,7 @@ def code_title_spliter(input_title):
         
         # 调用大模型API
         response = qwen_client.chat.completions.create(
-            model="qwen-plus-latest",
+            model="qwen-max-latest",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             top_p=0.1,

@@ -115,8 +115,8 @@ def judge_topic_relevance(topic: str, header_content: str) -> bool:
         """
 
         # 调用Qwen-turbo模型进行判断
-        print(f"当前标题: {topic}")
-        print(f"当前内容: {header_content}")
+        # print(f"当前标题: {topic}")
+        # print(f"当前内容: {header_content}")
         completion = qwen_client.chat.completions.create(
             model="qwen-plus-latest",
             messages=[
@@ -219,21 +219,21 @@ def eco_indicator_relevance(eco_indicator_name, topic):
         prompt = f"""
         请判断以下经济指标与标题是否相关:
         
-        经济指标: {eco_indicator_name}
-        标题: {topic}
+        经济指标，每个指标可能涉及不同行业或领域: {eco_indicator_name}
+        标题，包含行业信息: {topic}
     
         要求:
-        1. 如果经济指标与标题在主题、关键词或核心内容上相关，返回1
-        2. 如果经济指标与标题完全不相关，返回0
+        1. 请根据标题中的关键词和行业背景理解其核心内容，判断每个指标是否与标题的行业相关。如果经济指标与标题涉及的行业相关，返回1；
+        2. 如果经济指标与标题的行业相关性极低,或者完全无关，返回0；
         3. 请严格按照JSON格式返回结果：{{"result": 1}}或{{"result": 0}}
         4. 不要包含任何其他解释或文字
         """
-        
+
         # 调用Qwen-long模型进行判断
         completion = qwen_client.chat.completions.create(
             model="qwen-plus-latest",
             messages=[
-                {"role": "system", "content": "你是一个专业的文本分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
+                {"role": "system", "content": "你是一个专业的文本分析助手，擅长根据行业筛选指标。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
@@ -258,7 +258,7 @@ def eco_indicator_relevance(eco_indicator_name, topic):
         return False
 
 
-def judge_area_topic_relevance(topic: str, title: str, org_name: str) -> bool:
+def judge_area_topic_relevance(topic: str, title: str, involved_region: str) -> bool:
     """
     判断当前标题与内容是否相关
 
@@ -276,13 +276,14 @@ def judge_area_topic_relevance(topic: str, title: str, org_name: str) -> bool:
 
         大标题: {topic}
         政策标题: {title}
-        机构名称: {org_name}
+        涉及地区: {involved_region}
 
         要求:
         1. 判断地域相关性：
-           - 如果topic提及特定地区（如北京），而政策标题或机构名称涉及其他地区（如上海），返回0
-           - 如果topic没有提及具体地区（默认为全国范围），而政策标题或机构名称涉及地级市级别的地方政策，返回0
-           - 如果topic是全国范围的，且机构名称是国家级单位（如国务院、国家部委等），返回1
+           - 如果topic提及特定地区（如北京市），则保留该地区的政策、该地区所在省（如北京市的上级为全国）的政策以及全国性政策，返回1
+           - 如果topic提及特定省份（如浙江省），则保留该省的政策、该省内所有市的政策以及全国性政策，返回1
+           - 如果topic是全国范围的，则只保留全国性政策（国家级单位发布的政策），返回1
+           - 如果政策涉及的地区与topic提及的地区无关，也不是其上级行政区域，返回0
         2. 判断内容相关性：
            - 如果标题与内容在主题、关键词或核心内容上相关，或者当前的内容符合大标题相关的行业或者上下游行业，返回1
            - 如果大标题与内容完全不相关，返回0
@@ -293,7 +294,7 @@ def judge_area_topic_relevance(topic: str, title: str, org_name: str) -> bool:
         # 调用Qwen-turbo模型进行判断
         print(f"当前主题: {topic}")
         print(f"当前政策标题: {title}")
-        print(f"当前机构名称: {org_name}")
+        print(f"当前机构名称: {involved_region}")
         completion = qwen_client.chat.completions.create(
             model="qwen-plus-latest",
             messages=[
@@ -322,8 +323,114 @@ def judge_area_topic_relevance(topic: str, title: str, org_name: str) -> bool:
     except Exception as e:
         print(f"判断标题相关性时出错: {e}")
         return False
+def cics_name_relavance(cics_name: str, topic: str) -> bool:
+    """
+    判断CICS名称与当前标题是否相关
+    
+    参数:
+        cics_name (str): CICS名称
+        topic (str): 当前标题
+        
+    返回:
+        bool: 是否相关
+    """
+    try:
+        # 构建提示词
+        prompt = f"""
+        行业名称: {cics_name}
+        当前标题: {topic}
+
+        要求:
+        1. 判断行业名称与当前标题是否相关：
+           - 如果行业名称与当前标题在主题、关键词或核心内容上相关，或者行业是当前标题相关的上下游行业，返回1
+           - 如果行业名称与当前标题完全不相关，返回0
+        2. 请严格按照JSON格式返回结果：{{"result": 1}}或{{"result": 0}}
+        3. 不要包含任何其他解释或文字
+        """
+
+        completion = qwen_client.chat.completions.create(
+            model="qwen-turbo-latest",
+            messages=[
+                {"role": "system",
+                 "content": "你是一个专业的行业分析助手。请始终以JSON格式返回结果，格式为{\"result\": 1}或{\"result\": 0}。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"}  # 强制要求JSON格式响应
+        )
+
+        # 获取原始响应并打印用于调试
+        raw_response = completion.choices[0].message.content
+        print(f"API原始响应: {raw_response}")
+
+        try:
+            # 尝试解析JSON响应
+            result = json.loads(raw_response)
+            return result.get("result", 0) == 1
+
+        except json.JSONDecodeError as je:
+            print(f"JSON解析错误，原始响应: {raw_response}")
+            print(f"解析错误详情: {je}")
+            return False
+
+    except Exception as e:
+        print(f"判断行业相关性时出错: {e}")
+        return False
+    
 
 
+def filter_ic_trend_scores_by_relevance(ic_trend_scores, current_title):
+    """
+    根据cics_name与当前标题的相关性筛选ic_trend_scores
+    
+    参数:
+        ic_trend_scores (List[dict]): 原始的ic_trend_scores数据
+        current_title (str): 当前标题
+        
+    返回:
+        List[dict]: 筛选后的ic_trend_scores数据
+    """
+    # 如果ic_trend_scores为空，直接返回
+    if not ic_trend_scores:
+        print("ic_trend_scores为空，无需筛选")
+        return []
+    
+    # 统计所有不同的cics_name
+    cics_names = set()
+    for item in ic_trend_scores:
+        if 'cics_name' in item and item['cics_name']:
+            cics_names.add(item['cics_name'])
+    
+    print(f"找到{len(cics_names)}个不同的cics_name: {', '.join(cics_names)}")
+    
+    # 使用并行处理判断每个cics_name的相关性
+    relevant_cics_names = set()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # 提交所有判断任务
+        futures = {executor.submit(cics_name_relavance, cics_name, current_title): cics_name 
+                  for cics_name in cics_names}
+        
+        # 收集相关的cics_name
+        for future in concurrent.futures.as_completed(futures):
+            cics_name = futures[future]
+            try:
+                if future.result():  # 如果返回True则保留
+                    relevant_cics_names.add(cics_name)
+                    print(f"cics_name '{cics_name}' 与当前标题相关")
+                else:
+                    print(f"cics_name '{cics_name}' 与当前标题不相关")
+            except Exception as e:
+                print(f"判断cics_name '{cics_name}' 相关性时出错: {e}")
+    
+    print(f"筛选出{len(relevant_cics_names)}个相关的cics_name: {', '.join(relevant_cics_names)}")
+    
+    # 筛选保留相关cics_name的记录
+    filtered_scores = [score for score in ic_trend_scores 
+                      if 'cics_name' in score and score['cics_name'] in relevant_cics_names]
+    
+    print(f"原始数据有{len(ic_trend_scores)}条记录，筛选后保留{len(filtered_scores)}条记录")
+    
+    return filtered_scores
 
 if __name__ == "__main__":
     eco_indicators = [{

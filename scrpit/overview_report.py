@@ -6,11 +6,12 @@ from Agent.Overview_agent import extract_headers_from_text_qwen
 import concurrent.futures
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Generator
+import logging
 
 # 假设这些客户端已经在其他地方初始化
 from Agent.client_manager import qwen_client, silicon_client
 
-
+logger = logging.getLogger(__name__)
 
 def build_overview_with_report(input_title,purpose = None):
     # result_json,reasoning_content,time = title_augement(input_title,purpose)
@@ -259,7 +260,7 @@ def generate_comprehensive_toc_v2_stream(title, report_headers_list, keywords: L
     #     yield chunk
 
 
-def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, keywords: List[Dict[str, Any]], max_workers: int = 5) -> Generator[Tuple[str, float], None, None]:
+def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, keywords: List[Dict[str, Any]], purpose=None, max_workers: int = 10) -> Generator[Tuple[str, float], None, None]:
     """
     主函数：基于多个研报目录生成一个综合性的新目录，并行处理第一阶段
 
@@ -273,8 +274,18 @@ def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, ke
     all_summaries = []
     total_cost = 0
 
+    # 确保 max_workers 是整数
+    try:
+        num_workers = int(max_workers)
+        if num_workers <= 0:
+            logger.warning(f"max_workers 值 ({max_workers}) 无效，将使用默认值 5")
+            num_workers = 5
+    except (ValueError, TypeError):
+        logger.warning(f"max_workers 值 ({max_workers}) 不是有效整数，将使用默认值 5")
+        num_workers = 5
+
     # 第一阶段：并行处理每个研报
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
         future_to_report = {executor.submit(extract_h_single_report_v2, report, title): i
                             for i, report in enumerate(report_headers_list)}
 
@@ -284,9 +295,9 @@ def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, ke
             try:
                 summary, report_cost = future.result()
                 report_data = {
-                    'policy_id': report_headers_list[report_index].get('file_node_id', ''),
+                    'report_id': report_headers_list[report_index].get('file_node_id', ''),
                     's3_url': report_headers_list[report_index].get('s3_url', ''),
-                    'policy_summary': summary,
+                    'report_summary': summary,
                     'report_name': report_headers_list[report_index].get('name', '')
                 }
                 all_summaries.append(report_data)
@@ -294,42 +305,11 @@ def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, ke
             except Exception as e:
                 pass
 
-    # # 第一阶段：并行处理每个研报
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-    #     future_to_report = {executor.submit(extract_h_single_report, report): i
-    #                         for i, report in enumerate(report_headers_list)}
-    #
-    #     # 收集结果
-    #     for future in concurrent.futures.as_completed(future_to_report):
-    #         report_index = future_to_report[future]
-    #         try:
-    #             summary, report_cost = future.result()
-    #             report_data = {
-    #                 'policy_id': report_headers_list[report_index].get('file_node_id', ''),
-    #                 's3_url': report_headers_list[report_index].get('s3_url', ''),
-    #                 'policy_summary': summary,
-    #                 'report_name': report_headers_list[report_index].get('name', '')
-    #             }
-    #             all_summaries.append(report_data)
-    #             # total_cost += report_cost
-    #         except Exception as e:
-    #             pass
-    # 收集所有生成的内容
-    # 改为直接透传generate_final_toc_v2_stream的输出
-    # 初始化完整内容容器
     full_content = []
-    
+    print(f'309_title')
     # 流式生成目录内容
-    for chunk in generate_final_toc_v2_stream_no_title(all_summaries, title, keywords['core_keywords']):
+    for chunk in generate_final_toc_v2_stream_no_title(all_summaries, title, keywords['core_keywords'],purpose):
         if isinstance(chunk, str):
-            # 过滤掉以#开头的行
-            # lines = chunk.split('\n')
-            # filtered_lines = [line for line in lines if not line.strip().startswith('# ')]
-            
-            # if filtered_lines:
-            #     # 自然段落拼接（保留原有换行结构）
-            #     filtered_chunk = '\n'.join(filtered_lines)
-                # 将内容添加到完整容器中
             full_content.append(chunk)
             # 实时流式输出进度
             yield {'event': 'toc_progress', 'data': chunk}
@@ -344,10 +324,12 @@ def generate_comprehensive_toc_v2_stream_no_title(title, report_headers_list, ke
 
 if __name__ == "__main__":
     input_title = "AI芯片"
-    title,reports_node,keywords = build_overview_with_report(input_title)
+    title, reports_node, keywords, time_cost = build_overview_with_report(input_title)
     print("--------------------------------")
     print(title)
     print("--------------------------------")
     print(reports_node)
     print('--------------------------------')
     print(keywords)
+    print('--------------------------------')
+    print(f"耗时: {time_cost}秒")

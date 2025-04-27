@@ -95,6 +95,26 @@ def modify_second_title(second_level,topic = None):
     second_level['title'] = modified_pure_title
     second_level['ana_instruction'] = ana_instruction
     return second_level
+def modify_second_title_no_refine(second_level,topic = None):
+    # 获取当前二级标题下的所有三级标题
+    third_level_titles = [sec.get('title', '无标题') for sec in second_level.get('subsections', [])]
+
+    # 这里可以调用大模型来修改标题，暂时用简单的字符串处理作为示例
+    original_title = second_level.get('title', '无标题')
+    # modified_title = tuning_second_heading(third_level_titles, original_title,topic)
+    ana_instruction = get_ana_instruction_for_second_level(third_level_titles, original_title)
+    print(f"ana_instruction_modify_second_title:{ana_instruction}")
+    # print(f"优化后的二级标题: {modified_title}")
+
+    title_code,modified_pure_title = code_title_spliter(original_title)
+    print(f"title_code: {title_code}")
+    # 更新二级标题，并保留原始标题
+    second_level['previous_title'] = original_title
+    second_level['title_code'] = title_code
+    print()
+    second_level['title'] = modified_pure_title
+    second_level['ana_instruction'] = ana_instruction
+    return second_level
 
 
 def modify_second_level_headers(report_content,topic = None):
@@ -124,6 +144,18 @@ def modify_second_level_headers_stream(report_content,topic=None):
             future.result()
     return report_content
 
+def modify_second_level_headers_stream_no_refine(report_content,topic=None):
+    # 使用线程池并行处理二级标题
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        for first_level in [report_content]:
+            second_level_sections = first_level.get('subsections', [])
+            futures.extend(executor.submit(modify_second_title_no_refine, second_level,topic) for second_level in second_level_sections)
+
+        # 等待所有任务完成
+        for future in as_completed(futures):
+            future.result()
+    return report_content
 
 # def modify_first_level_title(first_level):
 #     # 获取当前一级标题下的所有二级标题
@@ -148,6 +180,22 @@ def modify_first_level_title(first_level,topic=None):
     print(f"ana_instruction_for_1st_level:{ana_instruction}")
     title_code,modified_pure_title = code_title_spliter(modified_title)
 
+
+    # 更新一级标题，并保留原始标题
+    first_level['previous_title'] = original_title
+    first_level['title'] = modified_pure_title
+    first_level['title_code'] = title_code
+    first_level['ana_instruction'] = ana_instruction
+    return first_level
+def modify_first_level_title_no_refine(first_level,topic=None):
+    # 获取当前一级标题下的所有二级标题
+    second_level_titles = [sec.get('title', '无标题') for sec in first_level.get('subsections', [])]
+    # 这里可以调用大模型来修改标题，暂时用简单的字符串处理作为示例
+    original_title = first_level.get('title', '无标题')
+    # modified_title = tuning_first_heading(second_level_titles, original_title,topic)
+    ana_instruction = get_ana_instruction_for_first_level(second_level_titles, original_title)
+    print(f"ana_instruction_for_1st_level:{ana_instruction}")
+    title_code,modified_pure_title = code_title_spliter(original_title)
 
     # 更新一级标题，并保留原始标题
     first_level['previous_title'] = original_title
@@ -180,6 +228,15 @@ def modify_first_level_headers_stream(report_content,topic=None):
             future.result()
     return report_content
 
+def modify_first_level_headers_stream_no_refine(report_content,topic=None):
+    # 使用线程池并行处理一级标题
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(modify_first_level_title_no_refine, first_level,topic) for first_level in [report_content]]
+
+        # 等待所有任务完成
+        for future in as_completed(futures):
+            future.result()
+    return report_content
 if __name__=="__main__":
     # 加载报告内容
     report_content = load_report_content()

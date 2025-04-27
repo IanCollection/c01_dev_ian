@@ -863,7 +863,7 @@ def delete_file_node_and_relations(file_node_id):
 if __name__ == "__main__":
     # print(1)
     import pandas as pd
-    df = pd.read_excel("/Users/linxuanxuan/PycharmProjects/C01_dev/data/25年研报列表.xlsx")
+    df = pd.read_excel("/Users/linxuanxuan/PycharmProjects/C01_dev/data/24年研报列表 (2).xlsx")
     # 循环遍历DataFrame中的id并删除对应的文件节点及关系
     print(f"开始批量删除文件节点，共 {len(df)} 条记录")
 

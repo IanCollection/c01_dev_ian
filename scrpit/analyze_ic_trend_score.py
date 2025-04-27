@@ -87,12 +87,6 @@ def analyze_industry_trends(data_list):
                 worst_quarter = quarterly_avg.idxmin()
 
                 dim_stats = {
-                    '基础统计': {
-                        '平均分': mean_score,
-                        '最高分': max_score,
-                        '最低分': min_score,
-                        '标准差': std_score
-                    },
                     '趋势分析': {
                         '整体趋势': trend,
                         '变化幅度': f"{change_rate}%",
@@ -109,7 +103,6 @@ def analyze_industry_trends(data_list):
                         '最差季度': f"Q{worst_quarter} ({quarterly_avg[worst_quarter]}分)",
                         '季度均值': quarterly_avg.to_dict()
                     },
-                    '景气等级分布': grade_distribution,
                     '主要景气等级': main_grade
                 }
             else:

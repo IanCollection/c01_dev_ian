@@ -78,5 +78,5 @@ class HybridSearch:
             results = self.es.search(index=index_name, body=search_query)
             return results['hits']['hits']
         except Exception as e:
-            print(f"搜索查询: {search_query}")
+            # print(f"搜索查询: {search_query}")
             raise e 

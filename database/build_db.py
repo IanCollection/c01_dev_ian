@@ -181,16 +181,20 @@ def update_faiss_indices(new_items, index_type, processed_ids_file):
 if __name__ == "__main__":
     # 设置日志系统
     logger = setup_logging()
-    
+    # 初始化ID追踪集合
+    succeeded_ids = set()
+    parsed_ids = set()
+
     # 获取当前文件的绝对路径
     current_dir = os.path.dirname(os.path.abspath(__file__))
     # 构建Excel文件的绝对路径
-    excel_path = os.path.join(current_dir, "..", "data", "25年报告列表-15-30页.xlsx")
-    
+    # excel_path = os.path.join(current_dir, "..", "data", "25年报告列表-15-30页.xlsx")
+    excel_path = os.path.join(current_dir, "..", "data", "24年研报列表 (2).xlsx")
+
     # 读取研报信息
     logger.info("开始读取研报信息...")
     reports_info = pd.read_excel(excel_path)
-    reports_info = reports_info.iloc[25:100]
+    reports_info = reports_info.iloc[23:500]
     logger.info(f"读取了{len(reports_info)}条研报信息")
     
     # 初始化保存目录
@@ -207,11 +211,14 @@ if __name__ == "__main__":
     content_processed = os.path.join(processed_dir, "content_processed_ids.json")
 
     # 使用线程池并行处理
-    with ThreadPoolExecutor(max_workers=12) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         # 新增三个字典用于记录增量数据
         delta_filename = {}
         delta_headers = {}
         delta_content = {}
+        processed_count = 0 # 记录已处理报告数量
+        batch_size = 20    # 每多少个报告更新一次FAISS
+        total_cost = 0      # 记录总成本
         
         # 提交所有任务
         future_to_row = {
@@ -220,6 +227,7 @@ if __name__ == "__main__":
         }
 
         # 处理结果
+        logger.info("开始处理研报文件并增量更新FAISS索引...")
         for future in tqdm(as_completed(future_to_row), desc="处理研报文件", 
                           total=len(reports_info), ncols=80, mininterval=1.0,
                           position=0, leave=True):
@@ -236,24 +244,60 @@ if __name__ == "__main__":
                 delta_headers.update(headers_dict)
                 delta_content.update(content_dict)
                 
-                logger.info(f"已处理文件ID: {current_id}")  # 使用logger替代print
+                processed_count += 1
+                # logger.info(f"已处理文件ID: {current_id}, 当前批次处理数量: {processed_count % batch_size}/{batch_size}") # 日志太频繁
+
+                # 每处理完 batch_size 个报告，就更新一次 FAISS 索引
+                if processed_count % batch_size == 0:
+                    logger.info(f"已处理 {processed_count} 个报告，开始更新FAISS索引...")
+                    if delta_filename:
+                        success, cost = update_faiss_indices(delta_filename, "filename", filename_processed)
+                        if success: total_cost += cost
+                        delta_filename = {} # 重置
+                    if delta_headers:
+                        success, cost = update_faiss_indices(delta_headers, "header", headers_processed)
+                        if success: total_cost += cost
+                        delta_headers = {} # 重置
+                    if delta_content:
+                        success, cost = update_faiss_indices(delta_content, "content", content_processed)
+                        if success: total_cost += cost
+                        delta_content = {} # 重置
+                    logger.info("FAISS批次更新完成。")
+
             except Exception as exc:
-                logger.error(f'处理报告时发生错误: {exc}')  # 使用logger替代print
-    
-    # 3. 增量更新faiss索引，只处理新增数据
-    print("开始更新FAISS索引...")
-    total_cost = 0
-    
-    if delta_filename:
-        success, cost = update_faiss_indices(delta_filename, "filename", filename_processed)
-        total_cost += cost
-    
-    if delta_headers:
-        success, cost = update_faiss_indices(delta_headers, "header", headers_processed)
-        total_cost += cost
-    
-    if delta_content:
-        success, cost = update_faiss_indices(delta_content, "content", content_processed)
-        total_cost += cost
-    
-    print(f"FAISS索引更新完成，总成本: {total_cost}")
+                row_index = future_to_row.get(future, -1) # 尝试获取索引
+                current_id_str = f"ID: {reports_info.iloc[row_index]['id']}" if row_index != -1 else "未知ID"
+                logger.error(f'处理报告时发生错误 ({current_id_str}): {exc}')
+                # 可以在这里添加更详细的错误处理，比如记录失败的ID
+        
+        # 处理最后一批不足 batch_size 的报告
+        if delta_filename or delta_headers or delta_content:
+            logger.info(f"处理剩余的 {processed_count % batch_size} 个报告，进行最后一次FAISS更新...")
+            if delta_filename:
+                success, cost = update_faiss_indices(delta_filename, "filename", filename_processed)
+                if success: total_cost += cost
+            if delta_headers:
+                success, cost = update_faiss_indices(delta_headers, "header", headers_processed)
+                if success: total_cost += cost
+            if delta_content:
+                success, cost = update_faiss_indices(delta_content, "content", content_processed)
+                if success: total_cost += cost
+            logger.info("最后的FAISS批次更新完成。")
+        
+        # 3. 移除原有的批量更新逻辑，因为更新已在循环中进行
+        # print("开始更新FAISS索引...")
+        # total_cost = 0
+        
+        # if delta_filename:
+        #     success, cost = update_faiss_indices(delta_filename, "filename", filename_processed)
+        #     total_cost += cost
+        
+        # if delta_headers:
+        #     success, cost = update_faiss_indices(delta_headers, "header", headers_processed)
+        #     total_cost += cost
+        
+        # if delta_content:
+        #     success, cost = update_faiss_indices(delta_content, "content", content_processed)
+        #     total_cost += cost
+        
+        logger.info(f"所有研报处理和FAISS索引更新完成，总成本: {total_cost}")
