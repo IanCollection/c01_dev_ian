@@ -178,6 +178,7 @@ def process_third_level_title_norefine(first_level_title, second_level_title, th
             "indicators_report":eco_indicators_report
         }
         try:
+            print(f"181_third_level_section['title']:{third_level_section['title']}")
             current_new_title_code, current_new_pure_title = code_title_spliter(third_level_section['title'])
             print(f'current_new_title_code: {current_new_title_code}')
         except Exception as tuning_error:

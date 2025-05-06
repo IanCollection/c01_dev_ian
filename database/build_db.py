@@ -19,6 +19,7 @@ from utils.parse_pdf_with_s3 import parse_pdf
 from database.build_neo4j import build_neo4j_nodes
 from database.faiss_IVFPQ import build_index_flat, build_index_IVFPQ, add_small_batch, get_available_gpu_resources
 
+#mark——test
 
 def setup_logging():
     """配置日志系统"""
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     # 读取研报信息
     logger.info("开始读取研报信息...")
     reports_info = pd.read_excel(excel_path)
-    reports_info = reports_info.iloc[23:500]
+    reports_info = reports_info.iloc[2500:-1]
     logger.info(f"读取了{len(reports_info)}条研报信息")
     
     # 初始化保存目录
@@ -217,7 +218,7 @@ if __name__ == "__main__":
         delta_headers = {}
         delta_content = {}
         processed_count = 0 # 记录已处理报告数量
-        batch_size = 20    # 每多少个报告更新一次FAISS
+        batch_size = 50    # 每多少个报告更新一次FAISS
         total_cost = 0      # 记录总成本
         
         # 提交所有任务

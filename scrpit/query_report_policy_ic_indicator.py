@@ -16,7 +16,7 @@ from Agent.surpervisor_agent import judge_title_relevance, industry_indicator_re
 from database.query_ic_indicators import get_cics_id_by_name, query_ic_trend_score, query_ic_current_rating
 from scrpit.analyze_ic_trend_score import analyze_industry_trends, get_analysis_summary
 from pg2es_hybrid.es_vector_query import es_vector_query, es_vector_query_eco_indicators, \
-    es_vector_query_eco_indicators_v2, es_vector_query_policy_info
+    es_vector_query_eco_indicators_v2, es_vector_query_policy_info, process_indicators
 # import pandas as pd
 import json
 
@@ -618,7 +618,16 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                 except Exception as e:
                     print(f"判断报告主题相关性时出错: {e}")
 
-        report_query_response = final_reports_topic_relevant
+        # 根据header_id去重
+        header_id_set = set()
+        report_query_response = []
+        for item in final_reports_topic_relevant:
+            header_id = item.get('header_id')
+            if header_id and header_id not in header_id_set:
+                header_id_set.add(header_id)
+                report_query_response.append(item)
+        print(f"去重后的报告数量: {len(report_query_response)}")
+
         timings['report_query'] = time.time() - step_start_time
         # --- 相关研报查询结束 ---
 
@@ -823,15 +832,18 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
         # --- 行业指标查询与分析结束 ---
 
 
+
+
         # --- 5. 宏观经济指标查询与分析 (eco_indicators, eco_indicators_sum, eco_indicators_report) ---
         step_start_time = time.time()
-        eco_indicators_raw, eco_ids, eco_indicators_sum = es_vector_query_eco_indicators_v2(query_text_for_indicators, year)
+        eco_indicators_raw, eco_ids = es_vector_query_eco_indicators_v2(query_text_for_indicators, year)
         print(f"820_eco_indicators_raw:{len(eco_indicators_raw)}")
+        print(f"830_eco_indicators_raw:{eco_indicators_raw}")
         relevant_eco_indicators = []
         if eco_indicators_raw:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future_to_indicator = {
-                    executor.submit(eco_indicator_relevance, indicator.get('name_cn', ''), current_title): indicator
+                    executor.submit(eco_indicator_relevance, indicator.get('name_cn', ''), topic): indicator
                     for indicator in eco_indicators_raw
                 }
                 for future in concurrent.futures.as_completed(future_to_indicator):
@@ -842,9 +854,10 @@ def query_relative_data_v3(year, current_title, analysis_response=None,topic = N
                     except Exception as e:
                         print(f"处理经济指标 {indicator.get('name_cn', '')} 时出错: {e}")
         print(f"筛选后的eco_indicators:{len(relevant_eco_indicators)}")
+        print(f"筛选后的eco_indicators:{relevant_eco_indicators}")
         print(f"eco_indicators 筛选耗时：{time.time()-step_start_time}")
         eco_indicators = relevant_eco_indicators
-
+        eco_indicators_sum = process_indicators(eco_indicators)
         eco_indicators_report = "无相关宏观经济指标数据"
         if eco_indicators:
             try:

@@ -135,7 +135,7 @@ def policy_summary_agent(policy_content: str) -> str:
                 print(f"政策概括生成出错，已重试{max_retries}次: {e}")
                 return "无法生成政策概括。", 0
             print(f"政策概括生成出错，正在进行第{retry_count}次重试: {e}")
-            time.sleep(1)  # 重试前等待1秒
+            time.sleep(0.1)  # 重试前等待1秒
 
 
 if __name__ == "__main__":

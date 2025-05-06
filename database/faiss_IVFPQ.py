@@ -81,8 +81,7 @@ def build_index_IVFPQ(texts_with_ids, type):
     
     # 计算是否需要重新训练
     need_retrain = should_retrain(
-        current_count=len(all_ids),
-        new_count=len(new_ids),
+        current_total_count=len(all_ids),
         last_trained_count=meta_data.get('last_trained_count', 0)
     )
     
@@ -316,28 +315,40 @@ def calculate_optimal_nprobe(nlist, n_vectors):
         # 大数据集，限制nprobe以保持搜索速度
         return max(1, min(nlist, int(nlist * 0.05)))
 
-def should_retrain(current_count, new_count, last_trained_count, retrain_ratio=0.25):
+def should_retrain(current_total_count, last_trained_count, retrain_ratio=0.3):
     """
-    根据当前向量数量和新增向量数量决定是否需要重新训练
-    
+    根据当前向量总数和上次训练时的数量决定是否需要重新训练
+
     Args:
-        current_count (int): 索引中当前的向量总数
-        new_count (int): 新添加的向量数量
+        current_total_count (int): 索引中更新后的向量总数 (即 current_count + new_count)
         last_trained_count (int): 上次训练时的向量数量
-        retrain_ratio (float): 触发重新训练的比例阈值，默认0.3(30%)
-        
+        retrain_ratio (float): 触发重新训练的增长比例阈值，默认0.3(30%)
+
     Returns:
         bool: 是否需要重新训练
     """
     # 如果索引从未训练过，必须训练
     if last_trained_count == 0:
+        print("索引从未训练过，需要进行首次训练。")
         return True
-    
-    # 计算新增向量占已训练向量的比例
-    ratio = new_count / last_trained_count
-    
-    # 如果新增向量超过已训练向量的一定比例，建议重新训练
-    return ratio > retrain_ratio
+
+    # 如果上次训练的数量有效
+    if last_trained_count > 0:
+        # 计算当前总数相对于上次训练数量的增长比例
+        # 确保 last_trained_count 不为零以避免除零错误
+        growth_ratio = (current_total_count - last_trained_count) / last_trained_count
+        print(f"当前总向量数: {current_total_count}, 上次训练时数量: {last_trained_count}, 增长比例: {growth_ratio:.2f}, 阈值: {retrain_ratio}")
+        # 如果增长比例超过阈值，则需要重新训练
+        if growth_ratio > retrain_ratio:
+            print(f"增长比例 {growth_ratio:.2f} > 阈值 {retrain_ratio}，建议重新训练。")
+            return True
+        else:
+            print(f"增长比例 {growth_ratio:.2f} <= 阈值 {retrain_ratio}，不进行重新训练。")
+            return False
+    else:
+        # last_trained_count < 0 的异常情况或逻辑错误
+        print(f"警告: last_trained_count ({last_trained_count}) 无效，默认需要训练。")
+        return True
 
 
 def add_small_batch(texts_with_ids, type, auto_retrain=True, retrain_ratio=0.3):
@@ -526,11 +537,11 @@ def add_small_batch(texts_with_ids, type, auto_retrain=True, retrain_ratio=0.3):
             all_ids = new_ids
         
         # 判断是否需要重新训练
-        need_retrain = should_retrain(current_count, new_count, last_trained_count, retrain_ratio)
+        need_retrain = should_retrain(current_count + new_count, last_trained_count, retrain_ratio)
         
         # 如果需要且允许重新训练
         if need_retrain and auto_retrain and type != "filename":
-            print(f"新增向量比例达到{retrain_ratio*100}%阈值，执行重新训练...")
+            print(f"新增向量比例达到{retrain_ratio*100}%阈值 或 首次训练，执行重新训练...")
             
             # 根据数据量确定最优参数
             params = calculate_optimal_ivfpq_params(len(all_ids), all_vectors.shape[1])
@@ -632,7 +643,7 @@ def add_small_batch(texts_with_ids, type, auto_retrain=True, retrain_ratio=0.3):
         else:
             # 不需要重新训练，直接添加新向量
             if not need_retrain:
-                print(f"新增向量比例未达到重新训练阈值，直接添加到现有索引")
+                print(f"总向量数增长比例未达到重新训练阈值，直接添加到现有索引")
             elif not auto_retrain:
                 print(f"需要重新训练，但auto_retrain=False，直接添加到现有索引")
             elif type == "filename":

@@ -12,6 +12,7 @@ from psycopg2._psycopg import cursor, connection
 from scrpit.indicator_query_v4 import connect_to_deloitte_db
 from pg2es_hybrid.search import HybridSearch
 from Agent.Overview_agent import year_extract_from_title
+from psycopg2 import Error as Psycopg2Error # 建议显式导入Error
 # 自定义JSON编码器，处理日期类型
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -322,11 +323,11 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
     Args:
         query_text (str): 查询文本
         year (list): 年份列表，如['2023']或['2022','2023','2024']
-        size (int, optional): 返回结果数量，默认为10
-        min_score (float, optional): 最小相似度分数，默认为0.5
+        size (int, optional): 返回结果数量，默认为15
+        min_score (float, optional): 最小相似度分数，默认为0.8
 
     Returns:
-        tuple: (结果列表, INDIC_ID列表, 指标信息列表)
+        tuple: (结果列表, INDIC_ID列表)
     """
     try:
         # 预处理查询文本，去除停用词和特殊字符
@@ -360,13 +361,13 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
 
         # 如果没有获取到INDIC_ID，直接返回空列表
         if not indic_ids:
-            return [], [], []
+            return [], []
 
         connection, cursor = connect_to_deloitte_db()
 
         if connection is None or cursor is None:
             print("数据库连接失败")
-            return [], indic_ids, []  # 返回空结果列表和已获取的indic_ids
+            return [], indic_ids  # 返回空结果列表和已获取的indic_ids
 
         # 查询unified_eco_data_view获取完整数据
         result_list = []
@@ -386,8 +387,6 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
             # 处理year参数，确保是字符串类型
             year_str = str(year[0]) if year and isinstance(year, (list, tuple)) else current_year
 
-
-
             # 使用to_char函数将period_date转换为字符串进行比较
             year_conditions = f"to_char(period_date, 'YYYY') = '{year_str}'"
             
@@ -397,20 +396,16 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
                 f"AND {year_conditions} "
                 f"LIMIT 30"
             )
-            # print("执行的SQL查询:", sql)  # 添加SQL打印
             cursor.execute(sql)
             
             # 获取结果只调用一次fetchall()
             rows = cursor.fetchall()
-            # print(f"v2查询结果数据长度: {len(rows)}")
             
             # 获取列名
             columns = [desc[0] for desc in cursor.description]
             
             # 使用已获取的rows数据
             for row in rows:
-                # print(row)
-                print('\n')
                 # 将结果转换为字典
                 result_dict = dict(zip(columns, row))
                 # 处理特殊类型数据
@@ -436,23 +431,19 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
                     continue
 
                 result_list.append(result_dict)
-            # print(f"result_list : {result_list}")
-            # print(len(result_list))
-            # 使用process_indicators处理结果列表，获取汇总的指标信息
-            indicator_info_summary = process_indicators(result_list)
 
         except Exception as db_error:
             print(f"数据库查询错误: {str(db_error)}")
-            return [], indic_ids, []  # 返回空结果列表和已获取的indic_ids
+            return [], indic_ids  # 返回空结果列表和已获取的indic_ids
         finally:
             # 确保关闭连接
             if connection:
                 connection.close()
 
-        return result_list, indic_ids, indicator_info_summary
+        return result_list, indic_ids
     except Exception as e:
         print(f"搜索出错: {str(e)}")
-        return [], [], []
+        return [], []
 
 def preprocess_query(query_text):
     """
@@ -530,10 +521,66 @@ def process_indicators(result_list):
     
     return result
 
+def count_dq_policy_data_rows():
+    """
+    查询 dq_policy_data 表的总行数。
 
+    Returns:
+        int: 表中的总行数。如果查询失败则返回 -1。
+    """
+    connection = None
+    cursor = None
+    total_rows = -1  # 默认为 -1 表示查询失败或未执行
+
+    try:
+        connection, cursor = connect_to_deloitte_db()
+        if connection and cursor:
+            # 执行 COUNT(*) 查询
+            cursor.execute("SELECT COUNT(*) FROM dq_policy_data")
+            # 获取查询结果 (只有一个结果，即行数)
+            result = cursor.fetchone()
+            if result:
+                total_rows = result[0]
+                # (可选) 不在这里打印，让主函数处理
+                # print(f"dq_policy_data 表的总行数为: {total_rows}")
+            else:
+                 print("未能从 dq_policy_data 获取行数。")
+
+        else:
+            print("数据库连接失败，无法查询 dq_policy_data 行数。")
+
+    except Psycopg2Error as e:
+        print(f"查询 dq_policy_data 表总行数时出错: {e}")
+    except Exception as e:
+        print(f"查询 dq_policy_data 表总行数时发生未知错误: {e}")
+    finally:
+        # 确保关闭游标和连接
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+            # (可选) 不在这里打印
+            # print("数据库连接已关闭。")
+
+    return total_rows
+
+# ===== 新增的主函数入口 =====
 if __name__ == "__main__":
+    print("开始查询 dq_policy_data 表的行数...")
+    count = count_dq_policy_data_rows()
 
-    # 连接数据库
+    if count >= 0: # 检查是否成功获取行数 (0 也是有效行数)
+        print(f"查询结果: dq_policy_data 表共有 {count} 行数据。")
+    else:
+        print("查询失败，未能获取 dq_policy_data 表的行数。")
+
+    print("\n主程序执行完毕。如果需要执行其他测试，请取消下面的注释。")
+
+# ===== 保留的原有注释掉的测试代码 =====
+# if __name__ == "__main__":
+#
+
+    # # 连接数据库
     # connection, cursor = connect_to_deloitte_db()
     # if connection and cursor:
     #     try:
@@ -551,13 +598,12 @@ if __name__ == "__main__":
     #             connection.close()
 
 
-    # 测试查询函数
-
-    query_text = "1.白酒行业国际市场发展启示 政策与市场驱动家，白酒出口机遇与挑战并存"
-    result_list, indic_ids, indicator_info_summary = es_vector_query_eco_indicators_v2(query_text, 2024)
-    print(result_list)
-    print(indic_ids)
-    print(indicator_info_summary)
+    # # 测试查询函数
+    #
+    # query_text = "1.白酒行业国际市场发展启示 政策与市场驱动家，白酒出口机遇与挑战并存"
+    # result_list, indic_ids = es_vector_query_eco_indicators_v2(query_text, 2024)
+    # print(result_list)
+    # print(indic_ids)
 
 
     # # 连接数据库
@@ -567,13 +613,13 @@ if __name__ == "__main__":
     #         # 构建SQL查询语句，查询指定ID
     #         sql_query = "SELECT * FROM unified_eco_data_view WHERE indic_id = '2180000492'"
     #         cursor.execute(sql_query)
-            
+
     #         # 获取所有匹配的数据
     #         rows = cursor.fetchall()
-            
+
     #         # 获取列名
     #         columns = [desc[0] for desc in cursor.description]
-            
+
     #         # 将结果转换为字典列表
     #         result_list = []
     #         for row in rows:
@@ -588,7 +634,7 @@ if __name__ == "__main__":
     #             if 'data_value' in row_dict:
     #                 row_dict['data_value'] = float(row_dict['data_value']) if row_dict['data_value'] else None
     #             result_list.append(row_dict)
-            
+
     #         # 打印查询结果
     #         if result_list:
     #             print(f"找到 {len(result_list)} 条匹配记录：")
@@ -596,7 +642,7 @@ if __name__ == "__main__":
     #                 print(result)
     #         else:
     #             print("未找到ID为2070900170的记录")
-                
+
     #     except Exception as e:
     #         print(f"查询unified_eco_data_view时出错: {str(e)}")
     #     finally:

@@ -27,7 +27,8 @@ from Agent.Overview_agent import (
     title_augement_stream, generate_toc_from_focus_points, match_focus_points,
     semantic_enhancement_agent, overview_conclusion, generate_toc_from_focus_points_stream,
     title_augement_without_cot, generate_final_toc_v2_stream_no_title,
-    year_extract_from_title, generate_ana_instruction, generate_toc_from_focus_points_stream_no_title
+    year_extract_from_title, generate_ana_instruction, generate_toc_from_focus_points_stream_no_title,
+    overview_conclusion_stream
 )
 from database.neo4j_query import get_neo4j_driver
 from palyground import extract_headlines, generate_section_list
@@ -823,6 +824,241 @@ def overview_v3_no_refine():
     logger.info(f"overview_v3_no_refine 接口处理完成。总请求耗时: {request_end_time - request_start_time:.2f} 秒。")
     return response
 
+
+
+@app.route('/overview_v3_no_refine_v2', methods=['POST'])
+@validate_json_request(['title'])
+@error_handler
+def overview_v3_no_refine_v2():
+    """
+    生成研报综合目录的API（流式版本）
+    """
+    request_start_time = time.time()
+    logger.info("进入 overview_v3_no_refine_v2 接口")
+
+    # 在请求上下文中获取数据
+    try:
+        data = request.get_json()
+        if not data:
+            return Response(
+                json.dumps({"error": "无效的请求数据"}, ensure_ascii=False),
+                mimetype='text/event-stream',
+                status=400
+            )
+        
+        topic = data.get('title', '')
+        purpose = data.get('purpose', '')
+        reports_overview = data.get('reports_overview', '')
+        general_overview = data.get('general_overview', [])
+        
+        if not topic:
+            return Response(
+                json.dumps({"error": "缺少必要参数 'title'"}, ensure_ascii=False),
+                mimetype='text/event-stream',
+                status=400
+            )
+    except Exception as e:
+        logger.error(f"解析请求数据时出错: {str(e)}", exc_info=True)
+        return Response(
+            json.dumps({"error": f"解析请求数据时出错: {str(e)}"}, ensure_ascii=False),
+            mimetype='text/event-stream',
+            status=400
+        )
+
+    def process_single_section(section, index, topic=None, print_lock=None):
+        """处理单个章节的独立函数，用于并行处理"""
+        single_section_start_time = time.time()
+        section_title = section.get('title', 'N/A')
+
+        # 使用锁确保日志按顺序打印
+        if print_lock:
+            with print_lock:
+                logger.info(f"开始处理章节 {index + 1}，topic: {topic}, section_title: '{section_title}'")
+        else:
+            logger.info(f"开始处理章节 {index + 1}，topic: {topic}, section_title: '{section_title}'")
+
+        try:
+            # 处理一级标题
+            step_start_time = time.time()
+            if print_lock:
+                with print_lock:
+                    logger.info(f"章节 {index + 1}: 调用 process_first_level_title_no_refine")
+            else:
+                logger.info(f"章节 {index + 1}: 调用 process_first_level_title_no_refine")
+
+            _, processed_first_level = process_first_level_title_no_refine(section, index, topic)
+            step_end_time = time.time()
+
+            if print_lock:
+                with print_lock:
+                    logger.info(
+                        f"章节 {index + 1}: process_first_level_title_no_refine 完成, title: {processed_first_level.get('title')}, 耗时: {step_end_time - step_start_time:.2f} 秒")
+            else:
+                logger.info(
+                    f"章节 {index + 1}: process_first_level_title_no_refine 完成, title: {processed_first_level.get('title')}, 耗时: {step_end_time - step_start_time:.2f} 秒")
+
+            # # 调整二级标题
+            step_start_time = time.time()
+            logger.info(f"章节 {index + 1}: 调用 modify_second_level_headers_stream")
+            modified_content_second_headings = modify_second_level_headers_stream_no_refine(processed_first_level,
+                                                                                            topic)
+            step_end_time = time.time()
+            logger.info(
+                f"章节 {index + 1}: modify_second_level_headers_stream 完成, 耗时: {step_end_time - step_start_time:.2f} 秒")
+
+            # # 调整一级标题
+            step_start_time = time.time()
+            logger.info(f"章节 {index + 1}: 调用 modify_first_level_headers_stream")
+            modified_content = modify_first_level_headers_stream_no_refine(modified_content_second_headings, topic)
+            step_end_time = time.time()
+            logger.info(
+                f"章节 {index + 1}: modify_first_level_headers_stream 完成, 耗时: {step_end_time - step_start_time:.2f} 秒")
+
+            # modified_content = processed_first_level
+            single_section_end_time = time.time()
+            total_time = single_section_end_time - single_section_start_time
+
+            if print_lock:
+                with print_lock:
+                    logger.info(f"成功完成处理章节 {index + 1} ('{section_title}'). 总耗时: {total_time:.2f} 秒")
+            else:
+                logger.info(f"成功完成处理章节 {index + 1} ('{section_title}'). 总耗时: {total_time:.2f} 秒")
+
+            # 返回结果和处理时间
+            return modified_content, total_time
+        except Exception as e:
+            single_section_end_time = time.time()
+            total_time = single_section_end_time - single_section_start_time
+
+            if print_lock:
+                with print_lock:
+                    logger.error(
+                        f"处理章节 {index + 1} (Title: '{section_title}') 时发生异常: {str(e)}. 耗时: {total_time:.2f} 秒",
+                        exc_info=True)
+            else:
+                logger.error(
+                    f"处理章节 {index + 1} (Title: '{section_title}') 时发生异常: {str(e)}. 耗时: {total_time:.2f} 秒",
+                    exc_info=True)
+
+            # 返回 None 表示此章节处理失败，同时返回处理时间
+            return None, total_time
+
+    def generate(topic, purpose, reports_overview, general_overview):
+        logger.info(f"开始处理标题: {topic}")
+        
+        # 用于存储最终概览内容
+        final_overview = None
+        
+        # 第一阶段：流式生成目录
+        try:
+            if isinstance(general_overview, list) and len(general_overview) >= 1:
+                logger.info("使用 general_overview[0] 生成最终概览")
+                for chunk in overview_conclusion_stream(reports_overview, general_overview[0], topic, purpose):
+                    if isinstance(chunk, dict):
+                        chunk_type = chunk.get('type')
+                        content = chunk.get('content')
+                        
+                        if chunk_type == 'error':
+                            # 发送错误事件
+                            yield f"event: error\ndata: {json.dumps({'error': content}, ensure_ascii=False)}\n\n"
+                            return
+                        elif chunk_type == 'final':
+                            # 目录生成完成事件
+                            final_overview = content
+                            yield f"event: overview_complete\ndata: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+                        elif chunk_type == 'content':
+                            # 目录生成进度事件
+                            # 注意：如果content本身已经是字符串，可以直接发送，无需json.dumps
+                            yield f"event: overview_progress\ndata: {json.dumps({'content': content}, ensure_ascii=False) if not isinstance(content, str) else content}\n\n"
+            else:
+                logger.warning("general_overview 格式不正确或为空")
+                for chunk in overview_conclusion_stream(reports_overview, general_overview, topic, purpose):
+                    if isinstance(chunk, dict):
+                        chunk_type = chunk.get('type')
+                        content = chunk.get('content')
+                        
+                        if chunk_type == 'error':
+                            yield f"event: error\ndata: {json.dumps({'error': content}, ensure_ascii=False)}\n\n"
+                            return
+                        elif chunk_type == 'final':
+                            final_overview = content
+                            yield f"event: overview_complete\ndata: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+                        elif chunk_type == 'content':
+                             yield f"event: overview_progress\ndata: {json.dumps({'content': content}, ensure_ascii=False) if not isinstance(content, str) else content}\n\n"
+
+
+            if not final_overview:
+                logger.error("未能生成最终概览")
+                # 发送错误事件
+                yield f"event: error\ndata: {json.dumps({'error': '未能生成最终概览'}, ensure_ascii=False)}\n\n"
+                return
+
+            # 第二阶段：处理生成的目录
+            logger.info("开始处理生成的目录")
+            # 发送状态更新事件
+            yield f"event: status\ndata: {json.dumps({'message': '目录生成完成，开始处理章节...'}, ensure_ascii=False)}\n\n"
+
+            # 提取章节内容
+            content_json = extract_headlines(final_overview)
+            section_list = generate_section_list(content_json)
+            logger.info(f"提取到 {len(section_list)} 个一级章节")
+
+            # 创建线程池处理章节
+            full_section_list = [None] * len(section_list)
+            print_lock = threading.Lock()
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_section = {
+                    executor.submit(process_single_section, section, i, topic, print_lock): i
+                    for i, section in enumerate(section_list)
+                }
+                
+                processed_count = 0
+                for future in concurrent.futures.as_completed(future_to_section):
+                    section_index = future_to_section[future]
+                    try:
+                        modified_content, process_time = future.result()
+                        if modified_content is not None:
+                            full_section_list[section_index] = modified_content
+                            processed_count += 1
+                            # 发送章节处理进度事件
+                            progress_data = {
+                                'message': f'完成章节 {section_index + 1}/{len(section_list)} 处理',
+                                'current': section_index + 1,
+                                'total': len(section_list)
+                            }
+                            yield f"event: section_progress\ndata: {json.dumps(progress_data, ensure_ascii=False)}\n\n"
+                    except Exception as e:
+                        logger.error(f"处理章节 {section_index + 1} 时发生错误: {str(e)}", exc_info=True)
+                        # 可以选择发送一个章节处理错误事件
+                        yield f"event: error\ndata: {json.dumps({'error': f'处理章节 {section_index + 1} 时发生错误: {str(e)}'}, ensure_ascii=False)}\n\n"
+                        continue
+
+            # 过滤掉处理失败的 None 值
+            final_list = [item for item in full_section_list if item is not None]
+            
+            # 发送最终结果事件
+            final_result_data = {
+                'sections': final_list,
+                'total_sections': len(section_list),
+                'processed_sections': processed_count
+            }
+            yield f"event: final_result\ndata: {json.dumps(final_result_data, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            logger.error(f"处理过程中发生错误: {str(e)}", exc_info=True)
+            # 发送通用错误事件
+            yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    # 将数据作为参数传递给生成器函数
+    return Response(
+        generate(topic, purpose, reports_overview, general_overview),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
 
 
 
@@ -1722,94 +1958,156 @@ def edit_first_level_title():
     formatted_result = format_third_level_result_to_json(title, title_code, ana_instruction, result)
     print(json.dumps(formatted_result, indent=4, ensure_ascii=False))
 
+    # 定义处理单个三级标题的函数
+    def process_third_level_section(index, third_level_section, parent_title, topic):
+        print(f"third_level_section: {third_level_section}")
+        original_instruction = third_level_section.get("ana_instruction", None)
+        print(f"Original instruction from third_level_section: {original_instruction}")
+        title_code = third_level_section.get("title_code", "")
+        third_title = third_level_section.get("title", "")
+        combined_title = parent_title + " - " + third_title
+        year = year_extract_from_title(combined_title)
+        try:
+            query_result = query_relative_data_v3(year, combined_title, original_instruction, topic)
+            reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+        except Exception as e:
+            print(f"错误：调用 query_relative_data_v3 时发生异常: {e}")
+            reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = [], [], [], [], "", [], {}, [], {}, {}
+
+        writing_instruction = writing_instruction or "无具体分析思路"
+        print(f"Instruction returned from query_relative_data_v3: {writing_instruction}")
+
+        reference = {
+            "report_source": reports if isinstance(reports, list) else [],
+            "policy_source": policy if isinstance(policy, list) else [],
+            "industry_indicator_part_1": ic_trends if ic_trends else "",
+            "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
+            "industry_indicator_part_2": ic_current,
+            "industry_indicator_part_2_analysis": filtered_result_ic_current_rating if isinstance(
+                filtered_result_ic_current_rating, dict) else {},
+            "indicators": eco_indicators,
+            "indicators_sum": eco_indicators_sum,
+            "indicators_report": eco_indicators_report
+        }
+
+        # 添加相关数据到三级标题
+        third_level_section["relative_data"] = {
+            "reference": reference,
+            "writing_instruction": writing_instruction
+        }
+        
+        return third_level_section
+
+    # 定义二级标题处理函数
+    def process_second_level_section(section, first_level_title, topic):
+        second_level_title = section.get("title", "")
+        section_title_code = section.get("title_code", "")
+        section_ana_instruction = section.get("ana_instruction", "")
+
+        # 生成三级标题
+        third_level_result = generate_third_level_titles(
+            second_level_title,
+            section_title_code,
+            section_ana_instruction
+        )
+
+        formatted_third_level = format_third_level_result_to_json_v2(
+            second_level_title,
+            section_title_code,
+            section_ana_instruction,
+            third_level_result
+        )
+
+        print(f"formatted_third_level: {json.dumps(formatted_third_level, indent=4, ensure_ascii=False)}")
+        # 处理formatted_third_level格式
+        if isinstance(formatted_third_level, str):
+            try:
+                formatted_third_level = json.loads(formatted_third_level)
+            except json.JSONDecodeError:
+                print(f"无法将formatted_third_level解析为JSON: {formatted_third_level}")
+                formatted_third_level = []
+        if isinstance(formatted_third_level, dict):
+            if "subsections" in formatted_third_level:
+                formatted_third_level = formatted_third_level.get("subsections", [])
+            else:
+                formatted_third_level = [formatted_third_level]
+
+        if not isinstance(formatted_third_level, list):
+            print(f"formatted_third_level不是列表类型: {type(formatted_third_level)}")
+            formatted_third_level = []
+
+        # 处理每个三级标题 (并行)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_third_level = {}
+            
+            for index, third_level_item in enumerate(formatted_third_level):
+                print(f"提交处理第{index}个三级标题: {third_level_item.get('title', '')}")
+                future = executor.submit(
+                    process_third_level_section, # 现在可以正确引用了
+                    index,
+                    third_level_item,
+                    first_level_title, # 使用传入的一级标题
+                    topic
+                )
+                future_to_third_level[future] = index
+            
+            for future in concurrent.futures.as_completed(future_to_third_level):
+                index = future_to_third_level[future]
+                try:
+                    result_section = future.result()
+                    formatted_third_level[index] = result_section
+                    print(f"完成处理第{index}个三级标题")
+                except Exception as e:
+                    print(f"处理第{index}个三级标题时发生错误: {e}")
+        
+        # 生成整体分析思路
+        all_third_titles = [item.get("title", "") for item in formatted_third_level if item.get("title")]
+        print(f"all_third_titles: {all_third_titles}")
+        new_ana_instruction = section_ana_instruction # 默认使用原有的
+        if all_third_titles:
+            combined_titles = "、".join(all_third_titles)
+            new_ana_instruction = generate_ana_instruction(combined_titles) # 覆盖
+            print(f"ana_instruction: {new_ana_instruction}")
+
+        # 返回处理后的二级标题部分，包含更新后的三级标题和分析思路
+        section["subsections"] = formatted_third_level
+        section["ana_instruction"] = new_ana_instruction
+        return section
+
+
     # 为每个二级标题生成三级标题并添加到结果中
     if "subsections" in formatted_result:
-        for section in formatted_result["subsections"]:
-            second_level_title = section.get("title", "")
-            section_title_code = section.get("title_code", "")
-            section_ana_instruction = section.get("ana_instruction", "")
+        # 使用多线程并行处理所有二级标题
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            # 提交所有二级标题的处理任务
+            future_to_second_level = {
+                executor.submit(
+                    process_second_level_section, # 现在可以正确引用了
+                    section,
+                    formatted_result.get("title", ""), # 传递一级标题
+                    topic
+                ): section for section in formatted_result["subsections"]
+            }
+            
+            # 处理完成的任务
+            updated_subsections = [None] * len(formatted_result["subsections"])
+            section_map = {id(s): i for i, s in enumerate(formatted_result["subsections"])}
 
-            # 生成三级标题
-            third_level_result = generate_third_level_titles(
-                second_level_title,
-                section_title_code,
-                section_ana_instruction
-            )
-
-            formatted_third_level = format_third_level_result_to_json_v2(
-                second_level_title,
-                section_title_code,
-                section_ana_instruction,
-                third_level_result
-            )
-
-            print(f"formatted_third_level: {json.dumps(formatted_third_level, indent=4, ensure_ascii=False)}")
-            # 处理formatted_third_level格式
-            if isinstance(formatted_third_level, str):
+            for future in concurrent.futures.as_completed(future_to_second_level):
+                original_section = future_to_second_level[future]
+                original_index = section_map[id(original_section)]
                 try:
-                    formatted_third_level = json.loads(formatted_third_level)
-                except json.JSONDecodeError:
-                    print(f"无法将formatted_third_level解析为JSON: {formatted_third_level}")
-                    formatted_third_level = []
-            if isinstance(formatted_third_level, dict):
-                if "subsections" in formatted_third_level:
-                    formatted_third_level = formatted_third_level.get("subsections", [])
-                else:
-                    formatted_third_level = [formatted_third_level]
-
-            if not isinstance(formatted_third_level, list):
-                print(f"formatted_third_level不是列表类型: {type(formatted_third_level)}")
-                formatted_third_level = []
-            # 处理每个三级标题
-            for index, third_level_section in enumerate(formatted_third_level):
-                print(f"third_level_section: {third_level_section}")
-                original_instruction = third_level_section.get("ana_instruction", None)
-                print(f"Original instruction from third_level_section: {original_instruction}")
-                title_code = third_level_section.get("title_code", "")
-                third_title = third_level_section.get("title", "")
-                combined_title = formatted_result.get("title", "") + " - " + third_title
-                year = year_extract_from_title(combined_title)
-                try:
-                    query_result = query_relative_data_v3(year, combined_title, original_instruction, topic)
-                    reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = query_result
+                    # 获取处理结果
+                    processed_section = future.result()
+                    updated_subsections[original_index] = processed_section
                 except Exception as e:
-                    print(f"错误：调用 query_relative_data_v3 时发生异常: {e}")
-                    reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators, eco_indicators_sum, eco_indicators_report, analysis_results_ictrend_v2, filtered_result_ic_current_rating = [], [], [], [], "", [], {}, [], {}, {}
+                    print(f"处理二级标题 '{original_section.get('title', '')}' 时出错: {e}")
+                    # 保留原始的section或标记为错误
+                    updated_subsections[original_index] = original_section # 或者可以选择标记错误
+            
+            # 更新原始formatted_result中的subsections
+            formatted_result["subsections"] = [s for s in updated_subsections if s is not None]
 
-                # ic_trends_analysis = process_ic_trends(ic_trends)
-                writing_instruction = writing_instruction or "无具体分析思路"
-                print(f"Instruction returned from query_relative_data_v3: {writing_instruction}")
-
-                reference = {
-                    "report_source": reports if isinstance(reports, list) else [],
-                    "policy_source": policy if isinstance(policy, list) else [],
-                    "industry_indicator_part_1": ic_trends if ic_trends else "",
-                    "industry_indicator_part_1_analysis": analysis_results_ictrend_v2,
-                    "industry_indicator_part_2": ic_current,
-                    "industry_indicator_part_2_analysis": filtered_result_ic_current_rating if isinstance(
-                        filtered_result_ic_current_rating, dict) else {},
-                    "indicators": eco_indicators,
-                    "indicators_sum": eco_indicators_sum,
-                    "indicators_report": eco_indicators_report
-                }
-
-                # 添加相关数据到三级标题
-                third_level_section["relative_data"] = {
-                    "reference": reference,
-                    "writing_instruction": writing_instruction
-                }
-                formatted_third_level[index]["relative_data"] = third_level_section["relative_data"]
-
-            # 生成整体分析思路
-            all_third_titles = [section.get("title", "") for section in formatted_third_level if section.get("title")]
-            print(f"all_third_titles: {all_third_titles}")
-            if all_third_titles:
-                combined_titles = "、".join(all_third_titles)
-                ana_instruction = generate_ana_instruction(combined_titles)
-                print(f"ana_instruction: {ana_instruction}")
-
-            section["subsections"] = formatted_third_level
-            section["ana_instruction"] = ana_instruction
 
     # 保存结果为JSON文件
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
