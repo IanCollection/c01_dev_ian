@@ -22,6 +22,12 @@ tables:
   #   vector_fields:
   #     - name: policy_summary
   #     - name: title
-  - name: eco_info_deloitte
+#  - name: eco_info_deloitte
+#    vector_fields:
+#      - name: name_cn
+#  - name: data_original_cics_map
+#    vector_fields:
+#      - name: name
+  - name: cics_industry
     vector_fields:
-      - name: name_cn
+      - name: name

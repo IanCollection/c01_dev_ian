@@ -44,7 +44,7 @@ def print_result(hit):
             print(f"{key}: {value}")
 
 
-def es_vector_query(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.2, use_multi_fields=True):
+def es_vector_query(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.7, use_multi_fields=True):
     """
     执行混合搜索查询
     
@@ -111,6 +111,103 @@ def es_vector_query(query_text, table_name="sc_policy_detail", vector_field="tit
     except Exception as e:
         print(f"搜索出错: {str(e)}")
         return []
+
+def es_keyword_query_policy_info(query_text, table_name="sc_policy_detail", field="title", size=10, min_score=0.8):
+    """
+    执行关键词搜索查询
+    
+    Args:
+        query_text (str): 查询文本
+        table_name (str): 要搜索的表名
+        field (str): 用于搜索的字段
+        size (int): 返回结果数量
+        min_score (float): 最低分数阈值，低于此分数的结果将被过滤
+        
+    Returns:
+        list: 搜索结果列表
+        list: 所有结果的ID列表
+    """
+    try:
+        # 预处理查询文本，去除停用词和特殊字符
+        processed_query = preprocess_query(query_text)
+        
+        # 直接使用Elasticsearch客户端进行查询，绕过HybridSearch.search方法
+        index_name = f"{table_name}_index"
+        search_query = {
+            "query": {
+                "match": {
+                    field: {
+                        "query": processed_query,
+                        "fuzziness": "AUTO"
+                    }
+                }
+            },
+            "size": size * 2  # 获取更多结果以便后续过滤
+        }
+        
+        try:
+            results = searcher.es.search(index=index_name, body=search_query)
+            all_results = results['hits']['hits']
+        except Exception as e:
+            print(f"Elasticsearch查询错误: {str(e)}")
+            return [], []
+        
+        # 过滤低分结果并按分数排序
+        filtered_results = [hit for hit in all_results if hit['_score'] >= min_score]
+        sorted_results = sorted(filtered_results, key=lambda x: x['_score'], reverse=True)
+        
+        # 提取所有ID
+        ids = [hit['_id'] for hit in sorted_results[:size]]
+        
+        # 只返回指定字段
+        result_list = []
+        
+        # 连接数据库
+        connection, cursor = connect_to_deloitte_db()
+        if connection and cursor:
+            try:
+                for hit in sorted_results[:size]:
+                    source = hit['_source']
+                    doc_id = hit['_id']
+                    
+                    # 查询org_name
+                    sql = f"SELECT org_name FROM dq_policy_data WHERE id = '{doc_id}'"
+                    cursor.execute(sql)
+                    result = cursor.fetchone()
+                    org_name = result[0] if result else ''
+                    
+                    filtered_hit = {
+                        'id': doc_id,
+                        'title': source.get('title', ''),
+                        'involved_industry_chain': source.get('involved_industry_chain', ''),
+                        'policy_summary': source.get('policy_summary', ''),
+                        'involved_region': source.get('involved_region', ''),
+                        'org_name': org_name
+                    }
+                    result_list.append(filtered_hit)
+            except Exception as db_error:
+                print(f"数据库查询错误: {str(db_error)}")
+            finally:
+                # 确保关闭连接
+                connection.close()
+        else:
+            # 如果数据库连接失败，仍然返回基本信息
+            for hit in sorted_results[:size]:
+                source = hit['_source']
+                filtered_hit = {
+                    'id': hit['_id'],
+                    'title': source.get('title', ''),
+                    'involved_industry_chain': source.get('involved_industry_chain', ''),
+                    'policy_summary': source.get('policy_summary', ''),
+                    'involved_region': source.get('involved_region', ''),
+                    'org_name': ''
+                }
+                result_list.append(filtered_hit)
+        
+        return result_list, ids
+    except Exception as e:
+        print(f"搜索出错: {str(e)}")
+        return [], []
 
 
 def es_vector_query_policy_info(query_text, table_name="sc_policy_detail", vector_field="title", size=10, min_score=0.8, use_multi_fields=True):
@@ -404,6 +501,9 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
             # 获取列名
             columns = [desc[0] for desc in cursor.description]
             
+            # 获取当前年份
+            # current_year = datetime.now().year
+            
             # 使用已获取的rows数据
             for row in rows:
                 # 将结果转换为字典
@@ -429,6 +529,10 @@ def es_vector_query_eco_indicators_v2(query_text, year, size=15, min_score=0.8):
                 # 如果name_cn包含[停]则跳过该结果
                 if '[停]' in result_dict['name_cn']:
                     continue
+                    
+                # # 检查update_time是否为当前年份
+                # if not is_current_year(result_dict.get('update_time')):
+                #     continue
 
                 result_list.append(result_dict)
 
@@ -564,90 +668,360 @@ def count_dq_policy_data_rows():
 
     return total_rows
 
+
+def es_vector_query_cics_name(query_text: str, size: int = 10):
+    """
+    对 data_original_cics_map 表进行向量查询
+
+    Args:
+        query_text (str): 查询文本
+        size (int, optional): 返回结果数量. 默认为 10.
+
+    Returns:
+        list: 查询结果列表
+    """
+    try:
+        # 初始化 HybridSearch
+        search = HybridSearch(config_path='config.yaml')
+        
+        # 执行向量查询
+        results = search.search(
+            table_name='data_original_cics_map',
+            query=query_text,
+            vector_field='name',
+            size=size
+        )
+        
+        return results
+    
+    except Exception as e:
+        print(f"向量查询失败: {e}")
+        return []
+
+
+
+
+
+
+def es_query_cics_industry(query_text: str, size: int = 10):
+    """
+    使用ES全文检索查询cics_industry表
+    
+    Args:
+        query_text (str): 查询文本
+        size (int, optional): 返回结果数量. 默认为 10.
+        
+    Returns:
+        list: 包含name和id的字典列表
+    """
+    try:
+        # 执行ES全文检索
+        results = searcher.search(
+            table_name='cics_industry',
+            query=query_text,
+            size=size
+        )
+        
+        # 提取name和id
+        return [{
+            'name': hit['_source'].get('name', ''),
+            'id': hit['_id']
+        } for hit in results]
+    
+    except Exception as e:
+        print(f"ES全文检索失败: {e}")
+        return []
+
+def es_vector_query_cics_industry(query_text: str, size: int = 10):
+    """
+    使用ES向量检索查询cics_industry表
+    
+    Args:
+        query_text (str): 查询文本
+        size (int, optional): 返回结果数量. 默认为 10.
+        
+    Returns:
+        list: 包含name和id的字典列表
+    """
+    try:
+        # 执行ES向量检索
+        results = searcher.search(
+            table_name='cics_industry',
+            query=query_text,
+            vector_field='name',
+            size=size
+        )
+        
+        # 提取name和id
+        return [{
+            'name': hit['_source'].get('name', ''),
+            'id': hit['_id']
+        } for hit in results]
+    
+    except Exception as e:
+        print(f"ES向量检索失败: {e}")
+        return []
+
+def es_hybrid_query_cics_industry(query_text: str, size: int = 10):
+    """
+    使用ES混合检索（全文+向量）查询cics_industry表
+    
+    Args:
+        query_text (str): 查询文本
+        size (int, optional): 返回结果数量. 默认为 10.
+        
+    Returns:
+        list: 包含name和id的字典列表
+    """
+    try:
+        # 使用新增的hybrid_search方法
+        results = searcher.hybrid_search(
+            table_name='cics_industry',
+            query=query_text,
+            vector_field='name',
+            size=size,
+            text_boost=0.4,    # 文本匹配权重
+            vector_boost=0.6,  # 向量相似度权重
+            min_score=0.2      # 最低分数阈值
+        )
+        
+        # 提取name和id
+        return [{
+            'name': hit['_source'].get('name', ''),
+            'id': hit['_id'],
+            'score': hit['_score']
+        } for hit in results]
+    
+    except Exception as e:
+        print(f"ES混合检索失败: {str(e)}")
+        return []
+
+
 # ===== 新增的主函数入口 =====
 if __name__ == "__main__":
-    print("开始查询 dq_policy_data 表的行数...")
-    count = count_dq_policy_data_rows()
-
-    if count >= 0: # 检查是否成功获取行数 (0 也是有效行数)
-        print(f"查询结果: dq_policy_data 表共有 {count} 行数据。")
-    else:
-        print("查询失败，未能获取 dq_policy_data 表的行数。")
-
-    print("\n主程序执行完毕。如果需要执行其他测试，请取消下面的注释。")
-
-# ===== 保留的原有注释掉的测试代码 =====
-# if __name__ == "__main__":
-#
-
-    # # 连接数据库
-    # connection, cursor = connect_to_deloitte_db()
-    # if connection and cursor:
-    #     try:
-    #         # 查询sc_policy_detail表的总行数
-    #         cursor.execute("SELECT COUNT(*) FROM sc_policy_detail")
-    #         total_rows = cursor.fetchone()[0]
-    #         print(f"sc_policy_detail表总行数: {total_rows}")
+    # print(1)
+    # 获取当前数据库中的所有表
+    # connection = None
+    # cursor = None
     #
-    #     except Exception as e:
-    #         print(f"查询sc_policy_detail表总行数时出错: {str(e)}")
-    #     finally:
-    #         if cursor:
-    #             cursor.close()
-    #         if connection:
-    #             connection.close()
-
-
-    # # 测试查询函数
-    #
-    # query_text = "1.白酒行业国际市场发展启示 政策与市场驱动家，白酒出口机遇与挑战并存"
-    # result_list, indic_ids = es_vector_query_eco_indicators_v2(query_text, 2024)
-    # print(result_list)
-    # print(indic_ids)
-
-
-    # # 连接数据库
-    # connection, cursor = connect_to_deloitte_db()
-    # if connection and cursor:
-    #     try:
-    #         # 构建SQL查询语句，查询指定ID
-    #         sql_query = "SELECT * FROM unified_eco_data_view WHERE indic_id = '2180000492'"
-    #         cursor.execute(sql_query)
-
-    #         # 获取所有匹配的数据
-    #         rows = cursor.fetchall()
-
-    #         # 获取列名
-    #         columns = [desc[0] for desc in cursor.description]
-
-    #         # 将结果转换为字典列表
-    #         result_list = []
-    #         for row in rows:
-    #             row_dict = dict(zip(columns, row))
-    #             # 处理特殊类型数据
-    #             if 'publish_date' in row_dict:
-    #                 row_dict['publish_date'] = row_dict['publish_date'].strftime('%Y-%m-%d') if row_dict['publish_date'] else None
-    #             if 'period_date' in row_dict:
-    #                 row_dict['period_date'] = row_dict['period_date'].strftime('%Y-%m-%d') if row_dict['period_date'] else None
-    #             if 'update_time' in row_dict:
-    #                 row_dict['update_time'] = row_dict['update_time'].strftime('%Y-%m-%d %H:%M:%S') if row_dict['update_time'] else None
-    #             if 'data_value' in row_dict:
-    #                 row_dict['data_value'] = float(row_dict['data_value']) if row_dict['data_value'] else None
-    #             result_list.append(row_dict)
-
-    #         # 打印查询结果
-    #         if result_list:
-    #             print(f"找到 {len(result_list)} 条匹配记录：")
-    #             for result in result_list:
-    #                 print(result)
+    # try:
+    #     connection, cursor = connect_to_deloitte_db()
+    #     if connection and cursor:
+    #         # 查询所有表名
+    #         cursor.execute("""
+    #             SELECT table_name 
+    #             FROM information_schema.tables 
+    #             WHERE table_schema = 'public'
+    #         """)
+    #         tables = cursor.fetchall()
+            
+    #         if tables:
+    #             print("当前数据库中的表：")
+    #             for table in tables:
+    #                 print(f"- {table[0]}")
     #         else:
-    #             print("未找到ID为2070900170的记录")
-
-    #     except Exception as e:
-    #         print(f"查询unified_eco_data_view时出错: {str(e)}")
-    #     finally:
-    #         # 关闭数据库连接
+    #             print("数据库中没有表")
+    #     else:
+    #         print("数据库连接失败，无法查询表信息")
+            
+    # except Psycopg2Error as e:
+    #     print(f"查询数据库表时出错: {e}")
+    # except Exception as e:
+    #     print(f"查询数据库表时发生未知错误: {e}")
+    # finally:
+    #     # 确保关闭游标和连接
+    #     if cursor:
+    #         cursor.close()
+    #     if connection:
     #         connection.close()
+
+    # try:
+    #     connection, cursor = connect_to_deloitte_db()
+    #     if connection and cursor:
+    #         # 查询 data_original_cics_map 表的前5行数据
+    #         cursor.execute("SELECT COUNT(*) FROM sc_policy_relation")
+    #         rows = cursor.fetchall()
+    #
+    #         if rows:
+    #             # 获取列名
+    #             colnames = [desc[0] for desc in cursor.description]
+    #             # 创建DataFrame
+    #             import pandas as pd
+    #             df = pd.DataFrame(rows, columns=colnames)
+    #             print("data_original_cics_map 表前5行数据：")
+    #             print(df)
+    #         else:
+    #             print("data_original_cics_map 表为空")
+    #     else:
+    #         print("数据库连接失败，无法查询表数据")
+    #
+    # except Psycopg2Error as e:
+    #     print(f"查询 data_original_cics_map 表时出错: {e}")
+    # except Exception as e:
+    #     print(f"查询 data_original_cics_map 表时发生未知错误: {e}")
+    # finally:
+    #     # 确保关闭游标和连接
+    #     if cursor:
+    #         cursor.close()
+    #     if connection:
+    #         connection.close()
+
+
+    topic = "2024年新能源汽车行业发展趋势"
+    current_title = "政策驱动与行业趋势分析/碳中和目标下的政策导向与市场影响/智能驾驶相关政策的技术支持与规范"
+    analyze_instruction = "结合碳中和目标，分析智能驾驶政策如何通过技术支持与规范推动市场发展，探讨其对行业趋势的具体影响及潜在机遇。"
+
+    # 获取 current_title 的第一级和第三级标题
+    title_parts = current_title.split('/')
+    if len(title_parts) >= 3:
+        first_level_title = title_parts[0]
+        third_level_title = title_parts[2]
+        print(f"第一级标题: {first_level_title}")
+        print(f"第三级标题: {third_level_title}")
+    else:
+        first_level_title = title_parts[0] if len(title_parts) >= 1 else ""
+        third_level_title = title_parts[2] if len(title_parts) >= 3 else ""
+        print("current_title 不包含足够的层级用于提取第一级和第三级标题")
+
+    query_text = f"{third_level_title}-{topic}"
+    # # topic = "2023年中国新能源汽车行业全景分析"
+    # # current_title = "政策驱动与行业趋势分析/碳中和目标下的政策导向与市场影响/智能驾驶相关政策的技术支持与规范/"
+    # # analyze_instruction = "结合碳中和目标，分析智能驾驶政策如何通过技术支持与规范推动市场发展，探讨其对行业趋势的具体影响及潜在机遇。"
+
+    #cics 测试查询v2
+    print(f"current_query_text:{query_text}")
+
+    # 调用 es_query_cics_industry（全文检索）
+    print("【ES全文检索 cics_industry】")
+    cics_fulltext_results = es_query_cics_industry(query_text, size=10)
+    if cics_fulltext_results:
+        for item in cics_fulltext_results:
+            print(f"- id: {item['id']}, name: {item['name']}")
+    else:
+        print("未检索到匹配的CICS行业（全文检索）")
+
+    print("\n【ES向量检索 cics_industry】")
+    cics_vector_results = es_vector_query_cics_industry(query_text, size=10)
+    if cics_vector_results:
+        for item in cics_vector_results:
+            print(f"- id: {item['id']}, name: {item['name']}")
+    else:
+        print("未检索到匹配的CICS行业（向量检索）")
+
+    print("\n【ES混合检索 cics_industry】")
+    cics_hybrid_results = es_hybrid_query_cics_industry(query_text, size=10)
+    if cics_hybrid_results:
+        for item in cics_hybrid_results:
+            print(f"- id: {item['id']}, name: {item['name']}")
+    else:
+        print("未检索到匹配的CICS行业（混合检索）")
+
+
+
+    #cics 测试查询v1
+    # # 获取第三级标题
+    # title_parts = current_title.split('/')
+    # if len(title_parts) >= 3:
+    #     third_level_title = title_parts[2]
+    #     print(f"第三级标题: {third_level_title}")
     # else:
-    #     print("数据库连接失败")
+    #     print("当前标题没有第三级")
+
+    # query_text = f"{third_level_title}-{topic}"
+    # # query_text = f"{third_level_title}"
+    # # query_text = current_title
+
+    # # 调用es_vector_query_cics_name函数进行查询
+    # cics_names = es_vector_query_cics_name(query_text)
+    
+    # # 打印检索到的cics_id和name
+    # if cics_names:
+    #     print("检索到的CICS信息：")
+    #     for item in cics_names:
+    #         cics_id = item['_source']['cics_id']
+    #         name = item['_source']['name']
+    #         print(f"- cics_id: {cics_id}, name: {name}")
+    # else:
+    #     print("未检索到匹配的CICS信息")
+
+
+
+
+    #政策信息查询
+    # policy_info,policy_ids = es_vector_query_policy_info(query_text,size = 10,min_score=0.7)
+    # print(f"基于向量 min_score = 0.7,找到 {len(policy_info)} 条结果:")
+    # print("="*50)
+    # print("="*50)
+    # for policy in policy_info:
+    #     print(policy['title'])
+    #     print('-'*50)
+    #     # print(policy['policy_summary'])
+    # # print(policy_info)
+    # # print(policy_ids)
+    # print("="*50)
+    # print("="*50)
+
+    # policy_info, policy_ids = es_vector_query_policy_info(query_text, size=10, min_score=0.7)
+    # print(f"基于向量 min_score = 0.8,找到 {len(policy_info)} 条结果:")
+    # print("=" * 50)
+    # print("=" * 50)
+    # for policy in policy_info:
+    #     print(policy['title'])
+    #     # print(policy['policy_summary'])
+    #     print('-'*50)
+    # # print(policy_info)
+    # # print(policy_ids)
+    # print("=" * 50)
+    # print("=" * 50)
+
+    # policy_info_keyword,policy_ids_keyword = es_keyword_query_policy_info(query_text,size = 10,min_score=0.6)
+    # print(f"基于关键词 min_score = 0.6, 找到 {len(policy_info_keyword)} 条结果:")
+    # print("="*50)
+    # print("="*50)
+    # for policy in policy_info_keyword:
+    #     print(policy['title'])
+    #     print('-'*50)
+    # # print(policy_info_keyword)
+    # # print(policy_ids_keyword)
+    # print("="*50)
+    # print("="*50)
+
+
+    # policy_info_keyword_v2,policy_ids_keyword_v2 = es_keyword_query_policy_info(query_text,size = 10,min_score=0.7)
+    # print(f"基于关键词 min_score = 0.7, 找到 {len(policy_info_keyword_v2)} 条结果:")
+    # print("="*50)
+    # print("="*50)
+    # for policy in policy_info_keyword_v2:
+    #     print(policy['title'])
+    #     print('-'*50)
+    #     # print(policy['policy_summary'])
+    # # print(policy_info_keyword_v2)
+    # # print(policy_ids_keyword_v2)
+    # print("="*50)
+    # print("="*50)
+
+    # policy_info_keyword_v3,policy_ids_keyword_v3 = es_keyword_query_policy_info(query_text,size = 10,min_score=0.8)
+    # print(f"基于关键词,min_score = 0.8, 找到 {len(policy_info_keyword_v3)} 条结果:")
+    # print("="*50)
+    # print("="*50)
+    # for policy in policy_info_keyword_v3:
+    #     print(policy['title'])
+    #     print('-'*50)   
+    #     # print(policy['policy_summary'])
+    # # print(policy_info_keyword_v3)
+    # # print(policy_ids_keyword_v3)
+    # print("="*50)
+    # print("="*50)
+
+
+
+    # print("开始查询 dq_policy_data 表的行数...")
+    # count = count_dq_policy_data_rows()
+    #
+    # if count >= 0: # 检查是否成功获取行数 (0 也是有效行数)
+    #     print(f"查询结果: dq_policy_data 表共有 {count} 行数据。")
+    # else:
+    #     print("查询失败，未能获取 dq_policy_data 表的行数。")
+    #
+    # print("\n主程序执行完毕。如果需要执行其他测试，请取消下面的注释。")
 

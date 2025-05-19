@@ -5,7 +5,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)  # 假设当前文件在项目根目录的子目录中
 sys.path.append(project_root)
 from scrpit.milestone_4 import process_ic_trends
-from scrpit.query_report_policy_ic_indicator import query_relative_data_v2
 from Agent.client_manager import qwen_client, silicon_client
 import json
 import os

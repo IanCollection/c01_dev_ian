@@ -500,7 +500,7 @@ def search(query, index_type='content', top_k=5):
             from utils.vector_generator import get_embedding_single_text
             vector_start_time = time.time()
             query_vector = get_embedding_single_text(query)
-            print(f"[Fallback Load] Query Vector: {query_vector}")
+            # print(f"[Fallback Load] Query Vector: {query_vector}")
             if not isinstance(query_vector, np.ndarray):
                 query_vector = np.array(query_vector)
             query_vector = query_vector.astype(np.float32)
@@ -508,8 +508,8 @@ def search(query, index_type='content', top_k=5):
             query_vector = np.ascontiguousarray(query_vector)
             vector_time_ms = (time.time() - vector_start_time) * 1000
             # --- 诊断打印 ---
-            print(f"[Fallback Load] Query Vector Shape: {query_vector.shape}")
-            print(f"[Fallback Load] Query Vector Sample: {query_vector[0][:5]}...")
+            # print(f"[Fallback Load] Query Vector Shape: {query_vector.shape}")
+            # print(f"[Fallback Load] Query Vector Sample: {query_vector[0][:5]}...")
             # ---------------
             
             # 执行搜索
@@ -517,8 +517,8 @@ def search(query, index_type='content', top_k=5):
             distances, indices = cpu_index.search(query_vector, top_k)
             search_time_ms = (time.time() - search_start_time) * 1000
             # --- 诊断打印 ---
-            print(f"[Fallback Load][CPU Search] Raw distances: {distances}")
-            print(f"[Fallback Load][CPU Search] Raw indices: {indices}")
+            # print(f"[Fallback Load][CPU Search] Raw distances: {distances}")
+            # print(f"[Fallback Load][CPU Search] Raw indices: {indices}")
             # ---------------
 
             # 在临时加载路径的返回部分添加转换

@@ -13,7 +13,7 @@ sys.path.append(project_root)
 
 from Agent.overview_agent_part2 import generate_third_level_titles, format_third_level_result_to_json, \
     generate_second_level_titles, format_third_level_result_to_json_v2
-from scrpit.query_report_policy_ic_indicator import query_relative_data_v2, query_relative_data_v3
+from scrpit.query_report_policy_ic_indicator import query_relative_data_v3
 import asyncio
 import multiprocessing
 import time

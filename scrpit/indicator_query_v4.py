@@ -447,30 +447,108 @@ def get_policy_details_by_ids(policy_ids,time = None):
         close_deloitte_connection(connection, cursor)
 
 
+def query_policy_related_tables_by_id(policy_id: int):
+    """
+    根据政策ID查询 sc_policy_detail, dq_policy_data, 和 sc_policy_relation 表的数据。
+
+    Args:
+        policy_id (int): 要查询的政策ID。
+
+    Returns:
+        dict: 一个字典，键是表名，值是包含该表查询结果的字典列表。
+              如果查询失败或无结果，对应表的值会是空列表。
+              如果数据库连接失败，返回 None。
+    """
+    if not policy_id:
+        print("错误：未提供 policy_id。")
+        return None
+
+    results = {
+        "sc_policy_detail": [],
+        "dq_policy_data": [],
+        "sc_policy_relation": []
+    }
+    table_queries = {
+        "sc_policy_detail": "SELECT * FROM sc_policy_detail WHERE id = %s;",
+        "dq_policy_data": "SELECT * FROM dq_policy_data WHERE id = %s;",
+        "sc_policy_relation": "SELECT * FROM sc_policy_relation WHERE id = %s;"
+    }
+
+    connection, cursor = None, None
+    try:
+        connection, cursor = connect_to_deloitte_db()
+        if connection is None or cursor is None:
+            print("错误：无法连接到数据库。")
+            return None
+
+        for table_name, sql_query in table_queries.items():
+            try:
+                # print(f"正在查询表: {table_name} 使用ID: {policy_id}")
+                cursor.execute(sql_query, (policy_id,))
+                table_results_raw = cursor.fetchall()
+
+                if table_results_raw:
+                    column_names = [desc[0] for desc in cursor.description]
+                    for row in table_results_raw:
+                        results[table_name].append(dict(zip(column_names, row)))
+                # else:
+                    # print(f"在表 {table_name} 中未找到ID {policy_id} 的记录。")
+            except Exception as e_table:
+                print(f"查询表 {table_name} 出错 (ID: {policy_id}): {str(e_table)}")
+                # 保留 results[table_name] 为空列表
+
+        return results
+
+    except Exception as e_main:
+        print(f"数据库操作主流程出错 (ID: {policy_id}): {str(e_main)}")
+        return None # 主流程错误，可能连接问题
+    finally:
+        if connection and cursor:
+            close_deloitte_connection(connection, cursor)
+
+
 
 # 示例用法
 if __name__ == "__main__":
-    try:
-        connection, cursor = connect_to_deloitte_db()
-        if connection and cursor:
-            # 查询数据库中所有表名
-            cursor.execute("""
-                SELECT COUNT(*) 
-                FROM dq_policy_data
-            """)
-            tables = cursor.fetchall()
-            print("当前数据库中的表：")
-            for table in tables:
-                print(table[0])
-        else:
-            print("无法连接到数据库")
-    except Exception as e:
-        print(f"查询失败: {str(e)}")
-    finally:
-        if 'cursor' in locals() and cursor:
-            cursor.close()
-        if 'connection' in locals() and connection:
-            connection.close()
+    # print(query_policy_related_tables_by_id(1964656))
+    
+    # 查询sc_policy_relation表中id为1964656的记录
+    policy_id = 1964656
+    result = query_policy_related_tables_by_id(policy_id)
+    
+    if result and result["sc_policy_relation"]:
+        print(f"找到sc_policy_relation表中id为{policy_id}的记录:")
+        for item in result["sc_policy_relation"]:
+            print(item)
+    else:
+        print(f"未找到sc_policy_relation表中id为{policy_id}的记录")
+
+    # 测试调用get_policy_details_by_ids
+    # policy_ids = [1964656]
+    # policy_details = get_policy_details_by_ids(policy_ids)
+    # print("查询结果:")
+    # print(policy_details)
+    # try:
+    #     connection, cursor = connect_to_deloitte_db()
+    #     if connection and cursor:
+    #         # 查询数据库中所有表名
+    #         cursor.execute("""
+    #             SELECT COUNT(*) 
+    #             FROM dq_policy_data
+    #         """)
+    #         tables = cursor.fetchall()
+    #         print("当前数据库中的表：")
+    #         for table in tables:
+    #             print(table[0])
+    #     else:
+    #         print("无法连接到数据库")
+    # except Exception as e:
+    #     print(f"查询失败: {str(e)}")
+    # finally:
+    #     if 'cursor' in locals() and cursor:
+    #         cursor.close()
+    #     if 'connection' in locals() and connection:
+    #         connection.close()
     # 测试打印表字段
     # ids = search_policy_relation("新能源汽车")
     # result = get_policy_details_by_ids(ids)

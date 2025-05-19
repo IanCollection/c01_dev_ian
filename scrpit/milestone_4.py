@@ -20,7 +20,7 @@ from scrpit.overview_report import build_overview_with_report, generate_comprehe
     generate_comprehensive_toc_v2_stream
 from scrpit.overview_title import generate_comprehensive_toc_with_focus_points
 from Agent.Overview_agent import overview_conclusion, tuning_third_heading, year_extract_from_title
-from scrpit.query_report_policy_ic_indicator import query_relative_data, query_relative_data_v2, query_relative_data_v3
+from scrpit.query_report_policy_ic_indicator import query_relative_data, query_relative_data_v3
 
 
 # 自定义JSON编码器
@@ -234,12 +234,11 @@ def process_third_level_title(first_level_title, second_level_title, third_level
             print(f"无效的三级标题数据格式: {third_level_section}")
             return create_default_third_level()
 
-        combined_title = f"{first_level_title} - {second_level_title} - {third_level_section['title']}"
+        combined_title = f"{first_level_title}/{second_level_title}/{third_level_section['title']}"
         # year = 2023
         year = year_extract_from_title(combined_title)
         try:
-            # reports, policy, ic_trends, ic_current, instruction, eco_indicators,eco_indicators_sum,eco_indicators_report, analysis_results_ictrend_v2,filtered_result_ic_current_rating= query_relative_data_v2(year, combined_title,instruction)
-            
+
             # 添加调用前日志
             print(f"[process_third_level_title PRE-CALL] Calling query_relative_data_v3 with topic: {topic}, instruction: {instruction}") 
             reports, policy, ic_trends, ic_current, writing_instruction, eco_indicators,eco_indicators_sum,eco_indicators_report, analysis_results_ictrend_v2,filtered_result_ic_current_rating= query_relative_data_v3(year, combined_title,instruction,topic)
